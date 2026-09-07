@@ -26,9 +26,9 @@ function seedState(): State {
     budget: {
       start: d,
       next,
-      initial: 850000,
-      daily: 25000,
-      essentialDaily: 15000,
+      initial: 1750000,
+      daily: 30000,
+      essentialDaily: 18000,
       buffer: 100000,
       complete: true,
     },
@@ -40,9 +40,7 @@ function seedState(): State {
     incomes: [
       { id: 'inc-asdos', title: 'Teaching Assistant Honorarium (FEB UI)', amount: 200000, due: plus(d, 15), status: 'waiting' },
     ],
-    ledger: [
-      { id: 'tx-lunch', kind: 'daily', amount: 15000, date: d, note: 'Campus Lunch at Kantin Kansas UI' },
-    ],
+    ledger: [],
     history: [
       { at: new Date().toISOString(), action: 'budget_init' },
     ],
@@ -87,6 +85,11 @@ export async function POST(req:Request){
     const db=database();
     await db.prepare('INSERT OR IGNORE INTO runway_accounts(owner,version,state,updated_at) VALUES(?,0,?,?)').bind(id,JSON.stringify(seedState()),new Date().toISOString()).run();
     const row=(await read(id))!;const state:State=JSON.parse(row.state);
+    if (body.command.type === 'reset') {
+      const seeded = seedState();
+      await db.prepare('UPDATE runway_accounts SET state=?,version=version+1,updated_at=? WHERE owner=? AND version=?').bind(JSON.stringify(seeded),new Date().toISOString(),id,row.version).run();
+      return json(payload({ ...row, state: JSON.stringify(seeded), version: row.version + 1 }));
+    }
     const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(body.command))))).map(x=>x.toString(16).padStart(2,'0')).join('');
     const key=body.requestId+':'+digest;
     if(state.requests.includes(key))return json(payload(row));

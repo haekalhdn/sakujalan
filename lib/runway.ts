@@ -38,7 +38,7 @@ export function forecast(s: State, date = today()) {
 export function apply(input:State,c:Command,date=today(),id=crypto.randomUUID()):State {
   const s=structuredClone(input);
   const add=(kind:string,value:number,note:string,extra:Partial<Entry>={})=>s.ledger.push({id,kind,amount:value,date,note,...extra});
-  if(c.type==='delete') return empty();
+  if(c.type==='delete'||c.type==='reset') return empty();
   if(c.type==='budget') {
     if(c.consent!==true) throw Error('Please accept data consent before saving.');
     const next=String(c.next); const h=day(next)-day(date); if(h<1||h>90)throw Error('Select next allowance/inflow date 1–90 days from today.');

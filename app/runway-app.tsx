@@ -186,13 +186,14 @@ export default function RunwayApp({ onBackToLanding }: RunwayAppProps = {}) {
   // Quick Action Levers
   const handleActivateLever1 = async () => {
     if (!data) return;
-    const foodPlan = data.state.plans.find((p) => p.title.toLowerCase().includes('lunch') || p.title.toLowerCase().includes('food'));
+    const foodPlan = data.state.plans.find((p) => p.title.toLowerCase().includes('lunch') || p.title.toLowerCase().includes('food') || p.title.toLowerCase().includes('hangout'));
     if (foodPlan && !foodPlan.paid && foodPlan.amount > 20000) {
-      await mutate({ type: 'save', id: foodPlan.id, amount: foodPlan.amount - 20000 });
-      setMessage('Lever 1 Applied: Saved Rp 20,000 on meals!');
+      const newAmount = Math.max(10000, foodPlan.amount - 20000);
+      await mutate({ type: 'save', id: foodPlan.id, amount: newAmount });
+      setMessage(`Lever 1 Applied: Reduced "${foodPlan.title}" to ${rp(newAmount)} (Saved Rp 20,000)!`);
     } else {
-      await mutate({ type: 'daily', title: 'GoFood Campus Partner Discount', amount: 15000 });
-      setMessage('Lever 1 Applied: Logged lunch at Rp 15,000 student deal!');
+      await mutate({ type: 'income', title: 'GoFood Campus Partner Subsidy / Cash Voucher', amount: 20000 });
+      setMessage('Lever 1 Applied: Received +Rp 20,000 GoFood Campus voucher rebate!');
     }
   };
 
@@ -407,19 +408,10 @@ export default function RunwayApp({ onBackToLanding }: RunwayAppProps = {}) {
           <button
             type="button"
             className={`radar-filter-btn ${activeProfile === 'benchmark' ? 'active' : ''}`}
-            onClick={() => {
+            onClick={async () => {
               setActiveProfile('benchmark');
-              void mutate({
-                type: 'budget',
-                balance: 850000,
-                next: date ? plus(date, 30) : '2026-10-07',
-                daily: 25000,
-                essentialDaily: 15000,
-                buffer: 100000,
-                complete: true,
-                consent: true,
-              });
-              setMessage('Reset to Nara benchmark case.');
+              await mutate({ type: 'reset' });
+              setMessage('Reset to Nara benchmark case (Rp 1.75M initial allowance).');
             }}
           >
             Nara Case
@@ -430,6 +422,17 @@ export default function RunwayApp({ onBackToLanding }: RunwayAppProps = {}) {
             onClick={() => show('setup_custom')}
           >
             + Set My Budget
+          </button>
+          <button
+            type="button"
+            className="radar-filter-btn"
+            style={{ background: '#FFF0ED', color: '#E06D53', borderColor: '#FFC8BF' }}
+            onClick={async () => {
+              await mutate({ type: 'reset' });
+              setMessage('Demo reset: Fresh allowance and daily safe limit restored!');
+            }}
+          >
+            ↺ Reset Demo State
           </button>
         </div>
       </div>
@@ -469,7 +472,7 @@ export default function RunwayApp({ onBackToLanding }: RunwayAppProps = {}) {
               <small style={{ color: '#00DF82', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '11px', display: 'block' }}>
                 SAFE TO SPEND TODAY
               </small>
-              <div className="big-money">Rp 14,000</div>
+              <div className="big-money">{data?.forecast?.safe != null ? rp(data.forecast.safe) : 'Rp 30,000'}</div>
               <span style={{ color: '#B4C6BC', fontSize: '13px' }}>Guaranteed safe daily limit</span>
             </div>
           </aside>
@@ -553,13 +556,36 @@ export default function RunwayApp({ onBackToLanding }: RunwayAppProps = {}) {
                           <span style={{ color: '#00DF82', fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em' }}>
                             TODAY&apos;S SAFE LIMIT
                           </span>
-                          <span className="small-tag" style={{ background: '#00AA13', color: '#fff' }}>B - C - R</span>
+                          <span className="small-tag" style={{ background: f.safe > 0 ? '#00AA13' : '#E06D53', color: '#fff' }}>
+                            {f.safe > 0 ? 'ACTIVE RUNWAY' : 'DAILY CAP REACHED'}
+                          </span>
                         </div>
-                        <div className="big-money" style={{ fontSize: '48px', margin: '12px 0' }}>{rp(f.safe)}</div>
+                        <div className="big-money" style={{ fontSize: '48px', margin: '12px 0', color: f.safe > 0 ? '#00DF82' : '#FF9980' }}>
+                          {rp(f.safe)}
+                        </div>
                         <p style={{ margin: 0, fontSize: '14px', color: '#B4C6BC', lineHeight: 1.5 }}>
-                          Safe to spend today without running short on rent or next transfer ({f.horizon} days to go).
+                          {f.safe > 0
+                            ? `Safe to spend today without running short on rent or next transfer (${f.horizon} days to go).`
+                            : `You have spent ${rp(f.spentToday)} today (Daily target: ${rp(b.daily)}). Use Levers in Tab 2 to unlock funds or wait for tomorrow!`}
                         </p>
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '18px' }}>
+
+                        {/* Live Sub-metrics */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '18px', padding: '10px 12px', background: 'rgba(255,255,255,0.06)', borderRadius: '8px' }}>
+                          <div>
+                            <span style={{ fontSize: '11px', color: '#88998F', display: 'block', textTransform: 'uppercase' }}>Spent Today</span>
+                            <strong style={{ fontSize: '14px', color: f.spentToday > b.daily ? '#FF9980' : '#FFFFFF' }}>{rp(f.spentToday)}</strong>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: '11px', color: '#88998F', display: 'block', textTransform: 'uppercase' }}>Daily Goal</span>
+                            <strong style={{ fontSize: '14px', color: '#FFFFFF' }}>{rp(b.daily)}</strong>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: '11px', color: '#88998F', display: 'block', textTransform: 'uppercase' }}>Days Left</span>
+                            <strong style={{ fontSize: '14px', color: '#00DF82' }}>{f.horizon}d</strong>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
                           <button
                             type="button"
                             onClick={() => show('formula')}
@@ -577,7 +603,13 @@ export default function RunwayApp({ onBackToLanding }: RunwayAppProps = {}) {
                             <span style={{ fontSize: '12px', fontWeight: 700, color: '#54665C', textTransform: 'uppercase' }}>
                               YOUR WALLET OVERVIEW
                             </span>
-                            <span style={{ fontSize: '12px', color: '#00AA13', fontWeight: 700 }}>● ON TRACK</span>
+                            <span style={{
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              color: f.gap > 0 ? '#E06D53' : f.safe === 0 ? '#D97706' : '#00AA13'
+                            }}>
+                              {f.gap > 0 ? '⚠ DEFICIT RISK' : f.safe === 0 ? '● DAILY CAP HIT' : '● ON TRACK'}
+                            </span>
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '14px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #EEF2EE', paddingBottom: '8px' }}>
@@ -589,6 +621,10 @@ export default function RunwayApp({ onBackToLanding }: RunwayAppProps = {}) {
                               <strong style={{ fontSize: '15px', color: '#E06D53' }}>- {rp(f.mandatory)}</strong>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #EEF2EE', paddingBottom: '8px' }}>
+                              <span style={{ fontSize: '14px', color: '#54665C' }}>Flexible Study/Hangout Plans</span>
+                              <strong style={{ fontSize: '15px', color: '#D97706' }}>- {rp(f.optional)}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #EEF2EE', paddingBottom: '8px' }}>
                               <span style={{ fontSize: '14px', color: '#54665C' }}>Untouchable Emergency Reserve</span>
                               <strong style={{ fontSize: '15px', color: '#00AA13' }}>- {rp(b.buffer)}</strong>
                             </div>
@@ -597,7 +633,7 @@ export default function RunwayApp({ onBackToLanding }: RunwayAppProps = {}) {
                         <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F4FAF4', padding: '10px 14px', borderRadius: '8px' }}>
                           <span style={{ fontSize: '13px', fontWeight: 700, color: '#007A0E' }}>Available Free Cash:</span>
                           <strong style={{ fontSize: '16px', color: '#00AA13' }}>
-                            {rp(Math.max(0, f.cash - f.mandatory - b.buffer))}
+                            {rp(Math.max(0, f.cash - f.mandatory - f.optional - b.buffer))}
                           </strong>
                         </div>
                       </div>
@@ -889,7 +925,10 @@ export default function RunwayApp({ onBackToLanding }: RunwayAppProps = {}) {
                         </tbody>
                       </table>
                       <div className="lever-impact"><TipIcon /> Recommendation: Studying at UI library saves Rp 45,000 minimum cafe overhead.</div>
-                      <Button variant="outline" onClick={() => setMessage('Study session logged: Saved Rp 45,000 in cafe costs!')}>
+                      <Button variant="outline" onClick={async () => {
+                        await mutate({ type: 'check', met: true, emergency: false });
+                        setMessage('Library study check-in recorded! Stayed within zero-cost campus facilities today.');
+                      }}>
                         Check-in at Library
                       </Button>
                     </div>

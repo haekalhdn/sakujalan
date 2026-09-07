@@ -14,19 +14,24 @@ export default function TargoLanding({ onOpenCockpit }: TargoLandingProps) {
   const [savedVal, setSavedVal] = useState('+Rp 45k');
   const [particles, setParticles] = useState<Array<{ id: number; kind: string; x: number; dur: number; delay: number; size: number }>>([]);
 
-  // Live metric cycling
+  // Live metric fetching from API
   useEffect(() => {
-    const safes  = ['Rp 28k','Rp 31k','Rp 26k','Rp 34k','Rp 29k'];
-    const days   = ['23d','22d','24d','21d','23d'];
-    const saveds = ['+Rp 45k','+Rp 38k','+Rp 52k','+Rp 41k','+Rp 47k'];
-    let i = 0;
-    const t = setInterval(() => {
-      i = (i + 1) % safes.length;
-      setSafeVal(safes[i]);
-      setDayVal(days[i]);
-      setSavedVal(saveds[i]);
-    }, 3200);
-    return () => clearInterval(t);
+    async function fetchMetrics() {
+      try {
+        const res = await fetch('/api/state');
+        if (res.ok) {
+          const data = (await res.json()) as { forecast?: { safe: number; horizon: number; pending: number } };
+          if (data?.forecast) {
+            const safe = data.forecast.safe;
+            setSafeVal(safe > 0 ? `Rp ${Math.round(safe / 1000)}k` : 'Rp 0');
+            setDayVal(`${data.forecast.horizon}d`);
+            const pending = data.forecast.pending;
+            setSavedVal(pending > 0 ? `+Rp ${Math.round(pending / 1000)}k` : '+Rp 55k');
+          }
+        }
+      } catch {}
+    }
+    void fetchMetrics();
   }, []);
 
   // Particle system
