@@ -54,9 +54,10 @@ class LocalD1Database {
           },
           run: async () => {
             if (query.includes('INSERT')) {
-              const [owner, version, state, updated_at] = boundArgs as [string, number, string, string];
+              // Route SQL is VALUES(?,0,?,?) — version is a literal, only 3 params bound.
+              const [owner, state, updated_at] = boundArgs as [string, string, string];
               if (!this.store.has(owner)) {
-                this.store.set(owner, { owner, version: version ?? 0, state, updated_at });
+                this.store.set(owner, { owner, version: 0, state, updated_at });
                 this.save();
               }
               return { meta: { changes: 1 } };
