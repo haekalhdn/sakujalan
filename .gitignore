@@ -37,3 +37,11 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+
+# agent logs & backups
+.agents/
+*.bak
+AGENTS.md
+ORIGINAL_REQUEST.md
+TEST_INFRA.md
+TEST_READY.md
