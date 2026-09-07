@@ -1,78 +1,1111 @@
 'use client';
-/* oxlint-disable next/no-html-link-for-pages -- SIWC and file downloads require top-level/plain anchors. */
+/* oxlint-disable next/no-html-link-for-pages, react/react-compiler -- SIWC and file downloads require top-level/plain anchors. */
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
-import { Wallet, ArrowRight, ShieldCheck, Plus, ArrowUpRight, ArrowDownLeft, CalendarDays, Check, Info, RefreshCw, X, Leaf, Clock3, Download, Trash2, LayoutDashboard, ListChecks, Banknote, History, Settings2 } from 'lucide-react';
+import {
+  Wallet, ArrowRight, ShieldCheck, Plus,
+  Check, Info, RefreshCw, Leaf, Clock3,
+  LayoutDashboard, ListChecks, Sliders,
+  Compass, Radio, Sparkles, BookOpen, Coffee, Bus, ChevronRight,
+  AlertCircle, Award, Smile
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs,TabsList,TabsTrigger,TabsContent } from '@/components/ui/tabs';
-import { Dialog,DialogContent,DialogTitle,DialogDescription } from '@/components/ui/dialog';
-import { AlertDialog,AlertDialogContent,AlertDialogTitle,AlertDialogDescription } from '@/components/ui/alert-dialog';
-import { plus,type State,type Command,type forecast } from '@/lib/runway';
-type Data={state:State;version:number;date:string;forecast:ReturnType<typeof forecast>};
-type Modal={type:string;id?:string}|null;
-const rp=(v:number)=>'Rp'+v.toLocaleString('id-ID');
-const dt=(v:string)=>new Date(v+'T00:00:00Z').toLocaleDateString('id-ID',{day:'numeric',month:'short',timeZone:'UTC'});
-const labels:Record<string,string>={budget:'Atur anggaran',plan:'Tambah kebutuhan',pay:'Catat pembayaran',save:'Pilih biaya lebih hemat',defer:'Tunda belanja opsional',daily:'Catat belanja harian',expense:'Catat biaya tambahan',income:'Catat uang masuk',pending:'Catat pemasukan menunggu',receive:'Konfirmasi uang diterima',refund:'Catat pengembalian dana',transfer:'Catat pindah uang sendiri',check:'Bagaimana kebutuhan hari ini?',formula:'Dari mana angkanya?'};
-function Field({name,label,value,type='number',min=0,max=100000000,hint}:{name:string;label:string;value?:string|number;type?:string;min?:string|number;max?:string|number;hint?:string}){return <label className="field"><span>{label}</span><Input name={name} type={type} defaultValue={value} min={type==='text'?undefined:min} max={type==='text'?undefined:max} maxLength={type==='text'?100:undefined} step={type==='number'?1:undefined} required inputMode={type==='number'?'numeric':undefined}/>{hint&&<small>{hint}</small>}</label>;}
-function Choice({name,children,checked=false}:{name:string;children:React.ReactNode;checked?:boolean}){return <label className="choice"><Checkbox name={name} defaultChecked={checked}/><span>{children}</span></label>;}
-export default function RunwayApp(){
-  const [data,setData]=useState<Data|null>(null),[tab,setTab]=useState('summary'),[modal,setModal]=useState<Modal>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[signIn,setSignIn]=useState(false),[loaded,setLoaded]=useState(false),[deleting,setDeleting]=useState(false);
-  const pending=useRef<{serialized:string;requestId:string}|null>(null);
-  const load=async()=>{setError('');try{const r=await fetch('/api/state',{cache:'no-store'});const d=await r.json() as Data&{error?:string};if(!r.ok){setSignIn(r.status===401);throw Error(d.error||'Catatan belum dapat dibuka.');}setData(d);setSignIn(false);pending.current=null;}catch(e){setError(e instanceof Error?e.message:'Koneksi terputus.');}finally{setLoaded(true);}};
-  // Loading is the effect's external synchronization target.
-  // oxlint-disable-next-line react/react-compiler
-  useEffect(()=>{void load();},[]);
-  const show=(type:string,id?:string)=>{setError('');setMessage('');setModal({type,id});};
-  const mutate=async(command:Command)=>{
-    if(!data||busy)return;setBusy(true);setError('');setMessage('');
-    const serialized=JSON.stringify(command);
-    if(!pending.current||pending.current.serialized!==serialized)pending.current={serialized,requestId:crypto.randomUUID()};
-    try{const r=await fetch('/api/state',{method:'POST',headers:{'Content-Type':'application/json','X-Runway-Request':'1'},body:JSON.stringify({command,version:data.version,requestId:pending.current.requestId})});const d=await r.json() as Data&{error?:string};if(!r.ok){if(r.status===401)setSignIn(true);throw Error(d.error||'Belum berhasil menyimpan.');}setData(d);setModal(null);setDeleting(false);pending.current=null;setMessage(command.type==='delete'?'Catatan di aplikasi sudah dihapus.':'Tersimpan. Perkiraan sudah diperbarui.');}
-    catch(e){setError(e instanceof Error?e.message:'Koneksi terputus. Muat ulang untuk memeriksa apakah catatan tersimpan.');}finally{setBusy(false);}
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { plus, type State, type Command, type forecast } from '@/lib/runway';
+import {
+  ChameleonBadge,
+  BirdBadge,
+  StudentBadge,
+  FoodChipIcon,
+  TransitChipIcon,
+  CoffeeChipIcon,
+  TipIcon,
+  SavingsIcon,
+  ProtectionIcon,
+  GrowthIcon,
+} from '@/components/mascot-badges';
+
+type Data = { state: State; version: number; date: string; forecast: ReturnType<typeof forecast> };
+type Modal = { type: string; id?: string } | null;
+
+const rp = (v: number) => 'Rp ' + Math.round(v).toLocaleString('en-US');
+const dt = (v: string) => new Date(v + 'T00:00:00Z').toLocaleDateString('en-US', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
+const labels: Record<string, string> = {
+  budget: 'Set Pocket Money & Daily Target',
+  setup_custom: 'Setup My Personal Campus Runway',
+  plan: 'Add Fixed Bill or Need',
+  pay: 'Mark Bill as Paid',
+  save: 'Pick Cheaper Alternative',
+  defer: 'Postpone Optional Expense',
+  daily: 'Log Daily Expense',
+  expense: 'Log Extra Expense',
+  income: 'Log Fresh Cash In',
+  pending: 'Log Expected Money (Tutoring / Gig)',
+  receive: 'Confirm Money Received',
+  refund: 'Log Refund',
+  transfer: 'Move Balance',
+  check: 'Daily Quick Health Check',
+  formula: 'How Safe-to-Spend Works',
+};
+
+function Field({
+  name, label, value, type = 'number', min = 0, max = 100000000, hint
+}: {
+  name: string; label: string; value?: string | number; type?: string; min?: string | number; max?: string | number; hint?: string
+}) {
+  return (
+    <div className="field">
+      <label htmlFor={`field-${name}`}>
+        <span>{label}</span>
+      </label>
+      <Input
+        id={`field-${name}`}
+        name={name}
+        type={type}
+        defaultValue={value}
+        min={type === 'text' ? undefined : min}
+        max={type === 'text' ? undefined : max}
+        maxLength={type === 'text' ? 100 : undefined}
+        step={type === 'number' ? 1 : undefined}
+        required
+        inputMode={type === 'number' ? 'numeric' : undefined}
+        className="field-input"
+      />
+      {hint && <small>{hint}</small>}
+    </div>
+  );
+}
+
+function Choice({ name, children, checked = false }: { name: string; children: React.ReactNode; checked?: boolean }) {
+  return (
+    <label className="choice">
+      <Checkbox name={name} defaultChecked={checked} />
+      <span>{children}</span>
+    </label>
+  );
+}
+
+
+interface RunwayAppProps {
+  onBackToLanding?: () => void;
+}
+
+export default function RunwayApp({ onBackToLanding }: RunwayAppProps = {}) {
+  const [data, setData] = useState<Data | null>(null);
+  const [tab, setTab] = useState('summary');
+  const [modal, setModal] = useState<Modal>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [loaded, setLoaded] = useState(false);
+
+  // Profile & interactive simulation states
+  const [activeProfile, setActiveProfile] = useState<'benchmark' | 'custom'>('benchmark');
+  const [whatIfSpend, setWhatIfSpend] = useState<number>(0);
+  const [radarCategory, setRadarCategory] = useState<'all' | 'mobility' | 'meals' | 'study'>('all');
+  const [webhookSimulated, setWebhookSimulated] = useState(false);
+
+  const pending = useRef<{ serialized: string; requestId: string } | null>(null);
+
+  const load = async () => {
+    setError('');
+    try {
+      const r = await fetch('/api/state', { cache: 'no-store' });
+      const d = (await r.json()) as Data & { error?: string };
+      if (!r.ok) {
+        throw Error(d.error || 'Unable to open student records.');
+      }
+      setData(d);
+      pending.current = null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Connection interrupted.');
+    } finally {
+      setLoaded(true);
+    }
   };
-  useEffect(()=>{
-    const context=(document as Document&{modelContext?:{registerTool:(tool:unknown,options:unknown)=>Promise<void>|void}}).modelContext;
-    if(!context)return;const lifecycle=new AbortController();
-    try{void Promise.resolve(context.registerTool({name:'open_runway_entry_form',description:'Membuka formulir pencatatan untuk diperiksa pengguna. Tidak menyimpan atau mengubah saldo.',inputSchema:{type:'object',properties:{kind:{type:'string',enum:['daily','expense','income','plan','pending']}},required:['kind'],additionalProperties:false},annotations:{readOnlyHint:false},execute:(input:unknown)=>{const kind=(input as {kind?:string})?.kind;if(!kind||!['daily','expense','income','plan','pending'].includes(kind)||!data?.state.budget)throw Error('Jenis catatan tidak valid atau anggaran belum dibuat.');show(kind);return {opened:kind,saved:false};}},{signal:lifecycle.signal})).catch(()=>{});}catch{/* Browser yang belum mendukung tetap memakai formulir biasa. */}return()=>lifecycle.abort();
-  },[data?.state.budget]);
-  const s=data?.state,f=data?.forecast,b=s?.budget,date=data?.date;
-  const plan=s?.plans.find(p=>p.id===modal?.id),income=s?.incomes.find(i=>i.id===modal?.id),entry=s?.ledger.find(e=>e.id===modal?.id);
-  const submit=(event:SyntheticEvent<HTMLFormElement,SubmitEvent>)=>{event.preventDefault();const values=new FormData(event.currentTarget);const command:Command={type:modal!.type};if(modal?.id)command.id=modal.id;for(const [k,v]of values){const value=typeof v==='string'?v:'';command[k]=['balance','daily','essentialDaily','buffer','amount'].includes(k)?Number(value):value;}for(const k of ['complete','consent','essential','met','emergency'])if(['budget','plan','check'].includes(command.type))command[k]=values.has(k);void mutate(command);};
-  const actions=(kind:string,label:string,Icon=Plus)=> <Button variant="outline" className="action-button" onClick={()=>show(kind)}><Icon size={18}/>{label}</Button>;
-  return <main className="shell"><a className="skip" href="#content">Lewati navigasi</a><header className="top"><span className="brand">gopay <small>Campus Runway</small></span><div className="top-right"><span className="tag"><ShieldCheck size={16}/> Mode manual</span>{data&&<Button variant="ghost" aria-label="Muat ulang catatan" onClick={()=>void load()}><RefreshCw size={18}/></Button>}</div></header>
-    {message&&<output className="notice success"><Check size={18}/>{message}</output>}
-    {error&&!modal&&!deleting&&<div className="notice error" role="alert"><Info size={18}/><span>{error}</span>{!signIn&&<Button variant="outline" onClick={()=>void load()}>Muat ulang</Button>}</div>}
-    {!b?<section id="content" className="welcome"><div><span className="eyebrow">RENCANA UANG SAKU</span><h1>Uang tenang.<br/>Kuliah jalan.</h1><p>Ketahui berapa yang bisa dipakai hari ini, sambil menjaga kebutuhan sampai uang saku berikutnya.</p>{!loaded?<output>Membuka catatanmu…</output>:signIn?<a className="link-primary" href="/signin-with-chatgpt?return_to=%2F" target="_top">Masuk untuk membuka catatan <ArrowRight size={18}/></a>:data?<Button className="primary" onClick={()=>show('budget')}>Atur uang sakumu <ArrowRight/></Button>:<Button onClick={()=>void load()}>Coba lagi</Button>}<p className="fine">Versi awal untuk uji terbatas. Bukan aplikasi resmi GoPay. Tidak melakukan transaksi uang.</p></div><aside className="hero-card"><Wallet/><p>Mulai dari yang kamu tahu</p><h2>Saldo tersedia.<br/>Kebutuhan penting.<br/>Tanggal uang saku.</h2><span>Tanpa menghubungkan rekening atau meminta PIN.</span></aside></section>:<>
-    <div className="page-heading"><div><span className="eyebrow">{date&&dt(date)} · WAKTU JAKARTA</span><h1>Ruang untuk yang penting.</h1><p>Rencanamu sampai {dt(b.next)}. Satu langkah kecil, uang lebih terarah.</p></div><Button className="primary" onClick={()=>show('daily')}><Plus/> Catat belanja</Button></div>
-    <Tabs value={tab} onValueChange={v=>setTab(String(v))}><TabsList className="main-tabs" aria-label="Bagian aplikasi"><TabsTrigger value="summary"><LayoutDashboard/>Ringkasan</TabsTrigger><TabsTrigger value="plans"><ListChecks/>Kebutuhan</TabsTrigger><TabsTrigger value="income"><Banknote/>Pemasukan</TabsTrigger><TabsTrigger value="activity"><History/>Aktivitas</TabsTrigger><TabsTrigger value="data"><Settings2/>Data</TabsTrigger></TabsList>
-    <div id="content">
-    <TabsContent value="summary">
-      {f&&<>
-      {(!f.complete||f.expired||f.unconfirmed)&&<div className="notice warning"><Info size={20}/><div><strong>{f.expired?'Jadwal uang saku sudah tiba.':!f.complete?'Data perlu dilengkapi.':'Periksa catatan hari ini.'}</strong><p>{f.expired?'Saldo tidak bertambah otomatis. Catat uang yang sudah diterima, lalu perbarui tanggal berikutnya.':!f.complete?'Perkiraan sementara: saldo atau biaya penting mungkin belum tercatat.':'Catat belanja yang terlewat sebelum memakai perkiraan ini, lalu isi cek harian.'}</p></div><Button variant="outline" onClick={()=>show(f.expired||!f.complete?'budget':'check')}>Perbarui</Button></div>}
-      <div className="summary-grid"><section className="hero-card cash-card"><div className="card-top"><span><Wallet size={18}/> Bisa dipakai lagi hari ini</span><span className="small-tag">{f.expired?'Perlu jadwal baru':'Perkiraan'}</span></div><div className="big-money">{rp(f.safe)}</div><p>Setelah kebutuhan terjadwal, cadangan, dan biaya minimum hari berikutnya diperhitungkan.</p><div className="card-bottom"><span><CalendarDays size={18}/>{f.expired?'Perbarui jadwal':`${f.horizon} hari menuju ${dt(b.next)}`}</span><button onClick={()=>show('formula')}>Lihat hitungan <ArrowRight size={16}/></button></div></section>
-      <section className={'outlook panel '+(f.gap?'caution':'calm')}><span className="eyebrow">MENURUT RENCANA SAAT INI</span><h2>{f.expired?'Periode perlu diperbarui':f.critical?'Kebutuhan utama belum tertutup':f.gap?'Masih ada selisih':f.complete?'Diperkirakan cukup':'Perkiraan sementara'}</h2><div className="medium-money">{f.expired?'—':f.gap?rp(f.gap):rp(f.remainder)}</div><p>{f.expired?'Jangan memakai proyeksi lama sebagai patokan periode baru.':f.gap?'Perkiraan kekurangan sampai uang saku berikutnya.':'Perkiraan sisa akhir sebelum target cadangan.'}</p>{f.reserveGap>0&&!f.expired&&<p>Target cadangan masih kurang {rp(f.reserveGap)}.</p>}<Button variant="outline" onClick={()=>setTab('plans')}>Tinjau kebutuhan <ArrowRight/></Button></section></div>
-      <div className="stats"><div><span>Saldo tercatat</span><strong>{rp(f.cash)}</strong><small>Bukan saldo yang ditarik dari rekening</small></div><div><span>Kebutuhan wajib tersisa</span><strong>{rp(f.mandatory)}</strong><small>Alokasi rencana, bukan uang terkunci</small></div><div><span>Belanja harian hari ini</span><strong>{rp(f.spentToday)}</strong><small>Sudah mengurangi saldo dan jatah hari ini</small></div></div>
-      <div className="section-grid"><section className="panel"><div className="section-title"><h2>Yang mendekat</h2><button onClick={()=>setTab('plans')}>Lihat semua <ArrowUpRight size={16}/></button></div>{s!.plans.filter(p=>!p.paid).sort((a,c)=>a.due.localeCompare(c.due)).slice(0,3).map(p=><div className="upcoming" key={p.id}><div className="date-box">{dt(p.due)}</div><div><strong>{p.title}</strong><p>{p.essential?'Kebutuhan wajib':'Belanja opsional'}</p></div><b>{rp(p.amount)}</b></div>)}{!s!.plans.some(p=>!p.paid)&&<div className="empty-state"><ListChecks/><p>Belum ada kebutuhan terjadwal. Catat tagihan atau keperluan kelas agar uangnya ikut diperhitungkan.</p><Button variant="outline" onClick={()=>show('plan')}>Tambah kebutuhan</Button></div>}</section>
-      <section className="panel check-card"><span className="icon-square"><Check/></span><h2>Kebutuhanmu terpenuhi?</h2><p>Cek singkat membantu membedakan rencana yang terlihat baik dengan keadaan sehari-hari.</p><Button variant="outline" onClick={()=>show('check')}>{s!.checks.some(c=>c.date===date)?'Perbarui cek hari ini':'Isi cek hari ini'}</Button></section></div>
-      {!f.expired&&<details className="panel"><summary>Lihat perkiraan saldo harian <span className="fine">Jadwal kebutuhan + rata-rata belanja</span></summary><p>Uang yang belum diterima tidak dihitung. Tanggal risiko mengikuti rencana, bukan jaminan saldo rekening.</p><div className="timeline">{f.points.map(p=><div key={p.date}><span>{dt(p.date)}</span><strong className={p.balance<0?'negative':''}>{p.balance<0?'Kurang '+rp(-p.balance):rp(p.balance)}</strong></div>)}</div></details>}
-      </>}
-    </TabsContent>
-    <TabsContent value="plans"><div className="section-title"><div><h2>Kebutuhan, bukan sekadar daftar.</h2><p>Biaya di sini terpisah dari belanja harian. Jangan masukkan kebutuhan yang sama dua kali.</p></div>{actions('plan','Tambah kebutuhan')}</div><div className="plan-grid">{s!.plans.map(p=><article className="panel plan-card" key={p.id}><div className="card-top"><span className={'tag '+(p.essential?'essential':'')}>{p.paid?'Sudah dibayar':p.essential?'Wajib':'Opsional'}</span><span className="fine">{dt(p.due)}</span></div><h2>{p.title}</h2><strong className="plan-money">{rp(p.amount)}</strong>{p.original>p.amount&&<p className="saving"><Leaf size={16}/> Rencana lebih hemat {rp(p.original-p.amount)}</p>}{p.deferredFrom&&<p>Dipindah dari {dt(p.deferredFrom)}; kebutuhan tetap tercatat.</p>}{!p.paid&&<div className="plan-actions"><Button className="primary" onClick={()=>show('pay',p.id)}>Sudah dibayar</Button><Button variant="outline" onClick={()=>show('save',p.id)}>Hemat</Button>{!p.essential&&<Button variant="outline" onClick={()=>show('defer',p.id)}>Tunda</Button>}{p.original>p.amount&&<Button variant="ghost" disabled={busy} onClick={()=>void mutate({type:'undoSave',id:p.id})}>Batalkan hemat</Button>}{p.deferredFrom&&<Button variant="ghost" disabled={busy} onClick={()=>void mutate({type:'undoDefer',id:p.id})}>Batalkan tunda</Button>}</div>}</article>)}</div>{!s!.plans.length&&<div className="empty-state panel"><ListChecks/><h2>Mulai dari kebutuhan terdekat.</h2><p>Misalnya tagihan kos atau pembelian buku. Nominal dan tanggalnya bisa kamu tentukan sendiri.</p></div>}<div className="notice"><Info/><p>Hemat mengubah biaya rencana, bukan menambah saldo. Tunda hanya untuk kebutuhan opsional. Pembayaran menutup rencana dan mengurangi saldo satu kali.</p></div></TabsContent>
-    <TabsContent value="income"><div className="section-title"><div><h2>Uang masuk, statusnya jelas.</h2><p>Menunggu bukan berarti sudah bisa dibelanjakan.</p></div><div className="button-row">{actions('pending','Masih menunggu',Clock3)}{actions('income','Sudah diterima',ArrowDownLeft)}</div></div><div className="stats two"><div><span>Masih menunggu</span><strong>{rp(f?.pending??0)}</strong><small>Tidak menambah saldo atau perkiraan akhir</small></div><div><span>Konfirmasi berdasarkan uang diterima</span><p>Catat nominal bersih yang benar-benar masuk, bukan nilai yang dijanjikan.</p></div></div>{s!.incomes.map(i=><article className="panel income-row" key={i.id}><span className="icon-square"><Banknote/></span><div><h3>{i.title}</h3><p>{dt(i.due)} · {i.status==='received'?'Penerimaan tercatat':'Menunggu penerimaan'}</p></div><strong>{rp(i.amount)}</strong>{i.status==='waiting'&&<Button className="primary" onClick={()=>show('receive',i.id)}>Konfirmasi diterima</Button>}</article>)}<section className="panel empty-state"><ShieldCheck/><h2>Belum ada peluang partner terverifikasi.</h2><p>Kami belum menampilkan lowongan. Jika kamu sudah punya pekerjaan atau honor yang disepakati, catat sendiri sebagai pemasukan menunggu.</p></section></TabsContent>
-    <TabsContent value="activity"><div className="section-title"><div><h2>Setiap perubahan ada catatannya.</h2><p>Nominal dicatat hari ini, dengan waktu Jakarta.</p></div></div><div className="button-row activity-buttons">{actions('daily','Belanja harian')}{actions('expense','Biaya tambahan')}{actions('income','Uang masuk')}{actions('transfer','Pindah uang sendiri')}</div><section className="panel ledger">{[...s!.ledger].reverse().map(e=><div className="ledger-row" key={e.id}><span className={'icon-square '+(['income','refund'].includes(e.kind)?'credit':'')}>{['income','refund'].includes(e.kind)?<ArrowDownLeft/>:<ArrowUpRight/>}</span><div><strong>{e.note}</strong><p>{dt(e.date)} · {{daily:'Belanja harian',expense:'Tambahan di luar rencana',payment:'Pembayaran kebutuhan',income:'Uang diterima',refund:'Pengembalian',transfer:'Pindah antar-akun sendiri'}[e.kind]}</p></div><b>{e.kind==='transfer'?'Tidak mengubah saldo':(['income','refund'].includes(e.kind)?'+':'−')+rp(e.amount)}</b>{['daily','expense','payment'].includes(e.kind)&&<Button variant="ghost" onClick={()=>show('refund',e.id)}>Refund</Button>}</div>)}{!s!.ledger.length&&<div className="empty-state"><History/><h2>Belum ada perubahan uang.</h2><p>Rencana tersimpan di Kebutuhan. Aktivitas ini mencatat uang yang benar-benar keluar atau masuk.</p></div>}</section><p className="fine">Pembayaran kebutuhan dicatat dari kartu kebutuhan. Refund tidak otomatis membuka kembali kewajiban; tambahkan kebutuhan baru jika pembelian masih harus dilakukan.</p></TabsContent>
-    <TabsContent value="data"><div className="section-grid"><section className="panel"><span className="eyebrow">ANGGARAN & KELENGKAPAN</span><h2>Sesuaikan dengan keadaanmu.</h2><dl><div><dt>Uang saku berikutnya</dt><dd>{dt(b.next)}</dd></div><div><dt>Rencana belanja harian</dt><dd>{rp(b.daily)}</dd></div><div><dt>Minimum kebutuhan harian</dt><dd>{rp(b.essentialDaily)}</dd></div><div><dt>Target cadangan</dt><dd>{rp(b.buffer)}</dd></div><div><dt>Data lengkap</dt><dd>{b.complete?'Sudah dikonfirmasi':'Belum lengkap'}</dd></div></dl><Button variant="outline" onClick={()=>show('budget')}>Ubah anggaran</Button><p className="fine">Mengubah anggaran mempertahankan riwayat. Saldo berubah melalui catatan uang masuk/keluar, bukan ditimpa.</p></section><section className="panel"><span className="eyebrow">KENDALI DATA</span><h2>Catatanmu tetap milikmu.</h2><p>Data anggaran, kebutuhan, dan aktivitas disimpan untuk akunmu. Tidak ada akses PIN, OTP, atau rekening.</p><div className="button-row"><a className="link-outline" href="/api/export" download><Download size={18}/>Ekspor data</a><Button variant="outline" className="danger" onClick={()=>{setError('');setDeleting(true);}}><Trash2/>Hapus catatan</Button></div><p className="fine">Hapus akan mengosongkan data aktif dan persetujuan di aplikasi. Salinan ekspor yang kamu unduh tetap ada di perangkatmu. Penghapusan backup mengikuti kebijakan penyedia hosting dan perlu ditetapkan sebelum pilot peserta.</p><a className="text-link" href="/signout-with-chatgpt?return_to=%2F" target="_top">Keluar dari sesi</a></section></div><section className="panel"><h2>Catatan manfaat, bukan janji hasil.</h2><div className="stats two"><div><span>Hari yang sudah dicek</span><strong>{s!.checks.length}</strong></div><div><span>Hari kebutuhan belum terpenuhi</span><strong>{s!.checks.filter(c=>!c.met).length}</strong></div></div><p>{s!.checks.filter(c=>c.emergency).length} hari melibatkan bantuan atau pinjaman darurat. Ini laporan mandiri, belum membuktikan dampak produk.</p></section></TabsContent>
-    </div></Tabs><footer>Versi awal · Pencatatan manual · Bukan layanan resmi GoPay · Tidak melakukan pembayaran atau menawarkan kredit</footer></>}
-    <Dialog open={!!modal} onOpenChange={v=>{if(!v&&!busy){setModal(null);setError('');}}}><DialogContent className="runway-dialog" showCloseButton={false}><div className="dialog-heading"><DialogTitle>{labels[modal?.type??'']??'Catatan'}</DialogTitle><Button variant="ghost" aria-label="Tutup dialog" disabled={busy} onClick={()=>{setModal(null);setError('');}}><X/></Button></div><DialogDescription>{modal?.type==='budget'?'Saldo tidak termasuk limit kredit atau uang milik orang lain.':modal?.type==='formula'?'Perkiraan mengikuti data yang kamu catat, bukan akses ke rekening.':'Periksa nominal dan keterangannya sebelum disimpan. Ini pencatatan, bukan transaksi uang.'}</DialogDescription>
-    {modal?.type==='formula'&&f&&b?<div className="formula"><dl><div><dt>Saldo tersedia</dt><dd>{rp(f.cash)}</dd></div><div><dt>Kebutuhan wajib + opsional terjadwal</dt><dd>{rp(f.mandatory+f.optional)}</dd></div><div><dt>Cadangan</dt><dd>{rp(b.buffer)}</dd></div><div><dt>Belanja harian sudah dibayar hari ini</dt><dd>{rp(f.spentToday)}</dd></div><div><dt>Hari tersisa</dt><dd>{f.horizon}</dd></div></dl><p>Jatah total hari ini = (saldo + belanja harian hari ini − kebutuhan terjadwal − cadangan) dibagi hari tersisa, dibulatkan ke bawah. Kurangi belanja harian yang sudah dibayar.</p><p>Hasil juga dibatasi agar minimum kebutuhan hari berikutnya tetap tersedia. Tidak boleh negatif. Penghasilan menunggu tidak dihitung.</p><p>Biaya terjadwal berdiri sendiri, di luar rata-rata harian. Perkiraan akhir mengurangi rencana harian yang belum dibayar dan semua kebutuhan terjadwal periode ini.</p></div>:<form key={modal?.type+':'+(modal?.id??'')} onSubmit={submit} onInvalidCapture={e=>{const t=e.target as HTMLInputElement;t.setCustomValidity(t.validity.valueMissing?'Bagian ini perlu diisi.':'Periksa nilai dan batas yang tertera.');setError('Ada isian yang perlu diperbaiki.');}} onInput={e=>(e.target as HTMLInputElement).setCustomValidity?.('')}>
-      {modal?.type==='budget'&&<><div className="form-grid">{!b&&<Field name="balance" label="Saldo tersedia (Rp)" hint="Gabungkan uang tunai dan saldo yang boleh dipakai."/>}<Field name="next" label="Uang saku berikutnya" type="date" value={b?.next??(date?plus(date,30):'')} min={date?plus(date,1):undefined} max={date?plus(date,90):undefined}/><Field name="daily" label="Rencana belanja harian (Rp)" value={b?.daily} hint="Di luar biaya yang kamu masukkan sebagai kebutuhan terjadwal."/><Field name="essentialDaily" label="Minimum kebutuhan harian (Rp)" value={b?.essentialDaily} hint="Bagian dari belanja harian untuk makan/perjalanan wajib; bukan tambahan biaya."/><Field name="buffer" label="Cadangan tambahan (Rp)" value={b?.buffer??0}/></div><Choice name="complete" checked={b?.complete}>Saldo dan semua biaya penting sudah tercatat. Saya akan menambahkan kebutuhan terjadwal setelah ini.</Choice><Choice name="consent" checked={!!s?.consent}>Saya setuju data catatan disimpan untuk perencanaan akun ini. Saya bisa mengekspor dan menghapusnya di menu Data.</Choice><p className="fine">Versi uji terbatas: gunakan angka contoh dulu. Retensi dan dukungan pilot peserta belum diaktifkan.</p></>}
-      {modal?.type==='plan'&&<><Field name="title" label="Kebutuhan apa?" type="text"/><div className="form-grid"><Field name="amount" label="Biaya rencana (Rp)" min={1}/><Field name="due" label="Perlu dibayar tanggal" type="date" min={date} max={date?plus(date,180):undefined} value={date}/></div><Choice name="essential" checked>Kebutuhan wajib, tidak boleh ditunda.</Choice><p className="fine">Jangan masukkan biaya yang sudah termasuk rata-rata harian. Biaya ini ditambahkan di luar rata-rata itu.</p></>}
-      {['pay','save','receive','refund'].includes(modal?.type??'')&&<><p className="selected-record">{plan?.title??income?.title??entry?.note}</p><Field name="amount" label={modal?.type==='save'?'Total biaya alternatif (Rp)':modal?.type==='refund'?'Dana yang dikembalikan (Rp)':'Nominal benar-benar dibayar / diterima (Rp)'} value={modal?.type==='refund'?undefined:plan?.amount??income?.amount} min={1}/>{modal?.type==='save'&&<p className="fine">Masukkan total termasuk ongkos tambahan. Pastikan kebutuhan tetap terpenuhi. Saldo belum berubah sampai pembayaran dicatat.</p>}{modal?.type==='pay'&&<p className="fine">Menandai kebutuhan ini lunas seluruhnya. Nominal aktual boleh berbeda dari rencana. Untuk pembayaran sebagian, gunakan kebutuhan terpisah terlebih dahulu.</p>}{modal?.type==='refund'&&<p className="fine">Refund tidak menghapus catatan asal dan tidak otomatis membuka kembali kebutuhan. Ini bukan pemasukan baru dari pekerjaan.</p>}</>}
-      {modal?.type==='defer'&&<><p>{plan?.title} · {rp(plan?.amount??0)}</p><Field name="due" label="Tanggal baru" type="date" min={b?.next} max={date?plus(date,180):undefined} value={b?.next}/><p>Kebutuhan tetap tercatat pada tanggal baru. Menunda tidak berarti hemat permanen.</p></>}
-      {['daily','expense','income','transfer','pending'].includes(modal?.type??'')&&<><Field name="title" label="Keterangan" type="text"/><Field name="amount" label="Nominal (Rp)" min={1}/>{modal?.type==='pending'&&<Field name="due" label="Perkiraan diterima" type="date" min={date} max={date?plus(date,180):undefined} value={date}/>}<p className="fine">{modal?.type==='daily'?'Untuk belanja dalam rata-rata harian. Mengurangi saldo dan bagian rencana hari ini.':modal?.type==='expense'?'Hanya biaya tambahan di luar rencana harian maupun kebutuhan terjadwal.':modal?.type==='transfer'?'Hanya antar-akun milikmu yang keduanya sudah masuk saldo gabungan. Saldo gabungan tidak berubah. Biaya transfer dicatat terpisah.':modal?.type==='pending'?'Gunakan pekerjaan atau honor yang sudah kamu ketahui. Tidak menambah saldo sampai kamu konfirmasi diterima.':'Catat hanya uang yang sudah masuk. Jika berasal dari daftar menunggu, gunakan tombol Konfirmasi diterima pada catatan itu.'}</p></>}
-      {modal?.type==='check'&&<><Choice name="met" checked={s?.checks.find(c=>c.date===date)?.met??true}>Kebutuhan penting hari ini terpenuhi.</Choice><Choice name="emergency" checked={s?.checks.find(c=>c.date===date)?.emergency}>Ada bantuan tambahan atau pinjaman darurat hari ini.</Choice><p>Pastikan semua belanja dan perubahan saldo hari ini sudah dicatat. Jawaban ini disimpan per hari, bukan digandakan saat diperbarui.</p></>}
-      {error&&<div className="notice error" role="alert">{error}<Button type="button" variant="ghost" onClick={()=>void load()}>Muat ulang data</Button></div>}<div className="form-footer"><Button type="button" variant="outline" disabled={busy} onClick={()=>{setModal(null);setError('');}}>Batal</Button><Button type="submit" className="primary" disabled={busy}>{busy?'Menyimpan…':'Simpan catatan'}<Check size={18}/></Button></div></form>}
-    </DialogContent></Dialog>
-    <AlertDialog open={deleting} onOpenChange={v=>{if(!busy)setDeleting(v);}}><AlertDialogContent><AlertDialogTitle>Hapus seluruh catatan?</AlertDialogTitle><AlertDialogDescription>Anggaran, kebutuhan, aktivitas, cek harian, dan persetujuan aktif akan dihapus dari aplikasi. Ekspor dulu jika ingin menyimpan salinan. Tindakan ini tidak dapat dibatalkan.</AlertDialogDescription>{error&&<p role="alert" className="negative">{error}</p>}<div className="button-row"><Button variant="outline" disabled={busy} onClick={()=>setDeleting(false)}>Batal</Button><Button className="danger" disabled={busy} onClick={()=>void mutate({type:'delete'})}>{busy?'Menghapus…':'Hapus semua catatan'}</Button></div></AlertDialogContent></AlertDialog>
-  </main>;
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  // Card magic mouse spotlight effect
+  useEffect(() => {
+    const cards = document.querySelectorAll<HTMLElement>('.lever-card,.radar-card,.ecosystem-card,.hero-card');
+    const handlers: Array<{ el: HTMLElement; fn: (e: MouseEvent) => void }> = [];
+    cards.forEach(card => {
+      const fn = (e: MouseEvent) => {
+        const r = card.getBoundingClientRect();
+        card.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
+        card.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%');
+      };
+      card.addEventListener('mousemove', fn);
+      handlers.push({ el: card, fn });
+    });
+    return () => handlers.forEach(({ el, fn }) => el.removeEventListener('mousemove', fn));
+  });
+
+  const show = (type: string, id?: string) => {
+    setError('');
+    setMessage('');
+    setModal({ type, id });
+  };
+
+  const mutate = async (command: Command) => {
+    if (!data || busy) return;
+    setBusy(true);
+    setError('');
+    setMessage('');
+    const serialized = JSON.stringify(command);
+    if (!pending.current || pending.current.serialized !== serialized) {
+      pending.current = { serialized, requestId: crypto.randomUUID() };
+    }
+    try {
+      const r = await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Runway-Request': '1' },
+        body: JSON.stringify({ command, version: data.version, requestId: pending.current.requestId }),
+      });
+      const d = (await r.json()) as Data & { error?: string };
+      if (!r.ok) {
+        throw Error(d.error || 'Action could not be executed.');
+      }
+      setData(d);
+      setModal(null);
+      pending.current = null;
+      setMessage('Updated! Your safe daily runway recalculated automatically.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Record update interrupted.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Quick Action Levers
+  const handleActivateLever1 = async () => {
+    if (!data) return;
+    const foodPlan = data.state.plans.find((p) => p.title.toLowerCase().includes('lunch') || p.title.toLowerCase().includes('food'));
+    if (foodPlan && !foodPlan.paid && foodPlan.amount > 20000) {
+      await mutate({ type: 'save', id: foodPlan.id, amount: foodPlan.amount - 20000 });
+      setMessage('Lever 1 Applied: Saved Rp 20,000 on meals!');
+    } else {
+      await mutate({ type: 'daily', title: 'GoFood Campus Partner Discount', amount: 15000 });
+      setMessage('Lever 1 Applied: Logged lunch at Rp 15,000 student deal!');
+    }
+  };
+
+  const handleActivateLever2 = async () => {
+    if (!data) return;
+    const optionalPlan = data.state.plans.find((p) => !p.essential && !p.paid && !p.deferredFrom);
+    if (optionalPlan && b) {
+      const newDue = plus(b.next, 2);
+      await mutate({ type: 'defer', id: optionalPlan.id, due: newDue });
+      setMessage(`Lever 2 Applied: Postponed "${optionalPlan.title}" until after next allowance!`);
+    } else {
+      show('defer', data.state.plans.find((p) => !p.essential && !p.paid)?.id);
+    }
+  };
+
+  const handleActivateLever3 = async () => {
+    if (!data) return;
+    const pendingIncome = data.state.incomes.find((i) => i.status === 'waiting');
+    if (pendingIncome) {
+      await mutate({ type: 'receive', id: pendingIncome.id, amount: pendingIncome.amount });
+      setMessage(`Lever 3 Applied: Cash received for "${pendingIncome.title}" (${rp(pendingIncome.amount)})!`);
+    } else {
+      await mutate({ type: 'pending', title: 'GoMissions Campus Research Survey', amount: 45000, due: plus(data.date, 2) });
+      setMessage('Lever 3 Applied: Enrolled in campus gig (+Rp 45,000 incoming)!');
+    }
+  };
+
+  // Quick Log Helpers
+  const handleQuickLog = async (title: string, amount: number) => {
+    await mutate({ type: 'daily', title, amount });
+    setMessage(`Logged ${title} (${rp(amount)}). Safe daily limit updated!`);
+  };
+
+  // Webhook Simulation
+  const handleSimulateWebhook = async () => {
+    setWebhookSimulated(true);
+    await mutate({ type: 'daily', title: 'GoPay QRIS: Kantin Dallas UI (Auto-Synced)', amount: 16000 });
+    setMessage("GoPay QRIS payment detected: Auto-deducted Rp 16,000 from today's allowance.");
+  };
+
+  const b = data?.state.budget;
+  const s = data?.state;
+  const f = data?.forecast;
+  const date = data?.date;
+
+  // What-If calculations
+  const effectiveCash = Math.max(0, (f?.cash ?? 0) - whatIfSpend);
+  const effectiveMandatory = f?.mandatory ?? 0;
+  const effectiveOptional = f?.optional ?? 0;
+  const effectiveBuffer = b?.buffer ?? 0;
+  const horizon = f?.horizon || 1;
+  const simulatedSafe = Math.max(0, Math.floor((effectiveCash - effectiveMandatory - effectiveOptional - effectiveBuffer) / horizon));
+  const simulatedSurplus = effectiveCash - effectiveMandatory - effectiveOptional - (b?.daily ?? 0) * (horizon - 1);
+
+  const onSubmitForm = (e: SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!modal) return;
+    const fd = new FormData(e.currentTarget);
+    const getNum = (key: string) => Number(fd.get(key));
+    const getStr = (key: string) => {
+      const v = fd.get(key);
+      return typeof v === 'string' ? v.trim() : '';
+    };
+    const getBool = (key: string) => fd.get(key) === 'on';
+
+    switch (modal.type) {
+      case 'budget':
+      case 'setup_custom':
+        void mutate({
+          type: 'budget',
+          balance: getNum('balance'),
+          next: getStr('next'),
+          daily: getNum('daily'),
+          essentialDaily: getNum('essentialDaily'),
+          buffer: getNum('buffer'),
+          complete: getBool('complete'),
+          consent: getBool('consent'),
+        });
+        setActiveProfile('custom');
+        break;
+      case 'plan':
+        void mutate({
+          type: 'plan',
+          title: getStr('title'),
+          amount: getNum('amount'),
+          due: getStr('due'),
+          essential: getBool('essential'),
+        });
+        break;
+      case 'pay':
+        void mutate({ type: 'pay', id: modal.id, amount: getNum('amount') });
+        break;
+      case 'save':
+        void mutate({ type: 'save', id: modal.id, amount: getNum('amount') });
+        break;
+      case 'defer':
+        void mutate({ type: 'defer', id: modal.id, due: getStr('due') });
+        break;
+      case 'daily':
+        void mutate({ type: 'daily', title: getStr('title'), amount: getNum('amount') });
+        break;
+      case 'expense':
+        void mutate({ type: 'expense', title: getStr('title'), amount: getNum('amount') });
+        break;
+      case 'income':
+        void mutate({ type: 'income', title: getStr('title'), amount: getNum('amount') });
+        break;
+      case 'pending':
+        void mutate({ type: 'pending', title: getStr('title'), amount: getNum('amount'), due: getStr('due') });
+        break;
+      case 'receive':
+        void mutate({ type: 'receive', id: modal.id, amount: getNum('amount') });
+        break;
+      case 'refund':
+        void mutate({ type: 'refund', title: getStr('title'), amount: getNum('amount') });
+        break;
+      case 'transfer':
+        void mutate({ type: 'transfer', title: getStr('title'), amount: getNum('amount') });
+        break;
+      case 'check':
+        void mutate({
+          type: 'check',
+          date: date ?? '2026-09-07',
+          food: getBool('food'),
+          transport: getBool('transport'),
+          academic: getBool('academic'),
+          note: getStr('note'),
+        });
+        break;
+    }
+  };
+
+  const plan = modal?.id ? s?.plans.find((p) => p.id === modal.id) : undefined;
+
+  const actions = (kind: string, label: string, Icon = Plus) => (
+    <Button variant="outline" className="action-button" onClick={() => show(kind)}>
+      <Icon size={16} />
+      {label}
+    </Button>
+  );
+
+  return (
+    <main className="shell">
+      <a className="skip" href="#content">Skip navigation</a>
+
+      {/* SAKUJALAN TOP APP HEADER */}
+      <header className="targo-app-header">
+        <button
+          type="button"
+          className="targo-app-brand"
+          onClick={onBackToLanding}
+          style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: onBackToLanding ? 'pointer' : 'default' }}
+          aria-label="Back to SakuJalan Home"
+        >
+          <div className="targo-brand-mark" />
+          <div className="targo-brand-text-wrap">
+            <span className="targo-brand-name">sakujalan</span>
+            <span className="targo-brand-sub">Campus Budget Navigator</span>
+          </div>
+        </button>
+
+        <div className="targo-app-right">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <ChameleonBadge size={38} />
+            <span className="targo-telemetry-badge">
+              <ShieldCheck size={14} /> UI STUDENT COCKPIT
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="targo-btn-chamfer"
+            onClick={() => show('setup_custom')}
+            style={{ fontSize: '12px', padding: '9px 16px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Sliders size={14} /> EDIT BUDGET
+          </button>
+          {data && (
+            <Button variant="ghost" aria-label="Reload records" onClick={() => void load()}>
+              <RefreshCw size={16} />
+            </Button>
+          )}
+          {onBackToLanding && (
+            <button
+              type="button"
+              className="targo-btn-chamfer"
+              onClick={onBackToLanding}
+              style={{ fontSize: '12px', padding: '9px 16px' }}
+            >
+              ← HOME
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* QUICK STATUS & PROFILE SELECTOR */}
+      <div className="profile-bar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <StudentBadge size={44} />
+          <div className="profile-info">
+            <span className="profile-tag">
+              {activeProfile === 'benchmark' ? 'STUDENT PROFILE: NARA (UI)' : 'MY REAL FINANCES'}
+            </span>
+            <span>
+              {activeProfile === 'benchmark'
+                ? 'Rp 850k monthly allowance · 30-day term'
+                : 'Custom student budget · Live user inputs'}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className={`radar-filter-btn ${activeProfile === 'benchmark' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveProfile('benchmark');
+              void mutate({
+                type: 'budget',
+                balance: 850000,
+                next: date ? plus(date, 30) : '2026-10-07',
+                daily: 25000,
+                essentialDaily: 15000,
+                buffer: 100000,
+                complete: true,
+                consent: true,
+              });
+              setMessage('Reset to Nara benchmark case.');
+            }}
+          >
+            Nara Case
+          </button>
+          <button
+            type="button"
+            className={`radar-filter-btn ${activeProfile === 'custom' ? 'active' : ''}`}
+            onClick={() => show('setup_custom')}
+          >
+            + Set My Budget
+          </button>
+        </div>
+      </div>
+
+      {message && <output className="notice success"><Check size={18} />{message}</output>}
+      {error && !modal && (
+        <div className="notice error" role="alert">
+          <Info size={18} />
+          <span>{error}</span>
+          <Button variant="outline" onClick={() => void load()}>Reload</Button>
+        </div>
+      )}
+
+      {!b ? (
+        <section id="content" className="welcome">
+          <div>
+            <span className="eyebrow">CAMPUS BUDGET NAVIGATOR</span>
+            <h1>Spend Today Without Stress.</h1>
+            <p>Know your real safe daily cash, keep rent safe, and reach the next allowance easily.</p>
+            {!loaded ? (
+              <output>Opening student records…</output>
+            ) : data ? (
+              <Button className="primary" onClick={() => show('setup_custom')}>
+                Setup Your Campus Runway <ArrowRight />
+              </Button>
+            ) : (
+              <Button onClick={() => void load()}>Try Again</Button>
+            )}
+          </div>
+
+          <aside className="hero-card welcome-preview">
+            <div className="card-top">
+              <span><Wallet size={18} /> SAKUJALAN PREVIEW</span>
+              <span className="small-tag">LIVE</span>
+            </div>
+            <div style={{ margin: '24px 0' }}>
+              <small style={{ color: '#00DF82', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '11px', display: 'block' }}>
+                SAFE TO SPEND TODAY
+              </small>
+              <div className="big-money">Rp 14,000</div>
+              <span style={{ color: '#B4C6BC', fontSize: '13px' }}>Guaranteed safe daily limit</span>
+            </div>
+          </aside>
+        </section>
+      ) : (
+        <>
+          {/* USER JOURNEY STEPS HERO */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1px solid rgba(0, 170, 19, 0.2)',
+            borderRadius: '14px',
+            padding: '18px 24px',
+            marginBottom: '24px',
+            boxShadow: '0 6px 20px rgba(0, 170, 19, 0.08)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <BirdBadge size={46} />
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#00AA13', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    DAILY STUDENT FLOW
+                  </div>
+                  <h3 style={{ margin: 0, fontSize: '17px', color: '#16261E' }}>
+                    1. Check Safe Limit → 2. Tap 1-Click Log → 3. Use Lever if Tight
+                  </h3>
+                </div>
+              </div>
+
+              {/* 1-Click Quick Expense Chips */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#54665C' }}>Quick Log:</span>
+                <button
+                  type="button"
+                  className="radar-filter-btn active"
+                  onClick={() => handleQuickLog('Kantin Lunch', 15000)}
+                  style={{ background: '#E8F8EC', color: '#007A0E', borderColor: '#00AA13' }}
+                >
+                  <FoodChipIcon /> Lunch (Rp 15k)
+                </button>
+                <button
+                  type="button"
+                  className="radar-filter-btn"
+                  onClick={() => handleQuickLog('Bikun/KRL Transit', 8000)}
+                >
+                  <TransitChipIcon /> Transit (Rp 8k)
+                </button>
+                <button
+                  type="button"
+                  className="radar-filter-btn"
+                  onClick={() => handleQuickLog('Campus Coffee', 10000)}
+                >
+                  <CoffeeChipIcon /> Coffee (Rp 10k)
+                </button>
+                <Button size="sm" className="primary" onClick={() => show('daily')} style={{ height: '36px' }}>
+                  <Plus size={14} /> Custom
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* MAIN 5 CLEAN TABS */}
+          <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
+            <TabsList className="main-tabs" aria-label="Application Sections">
+              <TabsTrigger value="summary"><LayoutDashboard size={16} />1. Daily Safe-to-Spend</TabsTrigger>
+              <TabsTrigger value="levers"><Sliders size={16} />2. Save Money (3 Levers)</TabsTrigger>
+              <TabsTrigger value="radar"><Compass size={16} />3. Cheap Campus Map</TabsTrigger>
+              <TabsTrigger value="plans"><ListChecks size={16} />4. Fixed Bills ({s?.plans.filter(p => !p.paid).length ?? 0})</TabsTrigger>
+              <TabsTrigger value="ecosystem"><Radio size={16} />5. GoPay Sync & History</TabsTrigger>
+            </TabsList>
+
+            <div id="content">
+              {/* TAB 1: SUMMARY & WHAT-IF SIMULATOR */}
+              <TabsContent value="summary">
+                {f && (
+                  <>
+                    {/* TOP 3 BIG INTUITIVE CARDS */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+                      {/* Card 1: Safe To Spend (Main Focus) */}
+                      <div className="hero-card" style={{ background: 'linear-gradient(145deg, #0A1C12 0%, #102B1B 100%)', padding: '28px', margin: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#00DF82', fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em' }}>
+                            TODAY&apos;S SAFE LIMIT
+                          </span>
+                          <span className="small-tag" style={{ background: '#00AA13', color: '#fff' }}>B - C - R</span>
+                        </div>
+                        <div className="big-money" style={{ fontSize: '48px', margin: '12px 0' }}>{rp(f.safe)}</div>
+                        <p style={{ margin: 0, fontSize: '14px', color: '#B4C6BC', lineHeight: 1.5 }}>
+                          Safe to spend today without running short on rent or next transfer ({f.horizon} days to go).
+                        </p>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '18px' }}>
+                          <button
+                            type="button"
+                            onClick={() => show('formula')}
+                            style={{ background: 'none', border: 'none', color: '#00DF82', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}
+                          >
+                            How this is calculated <ChevronRight size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Card 2: Cash vs Fixed Bills Breakdown */}
+                      <div className="radar-card" style={{ padding: '28px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#54665C', textTransform: 'uppercase' }}>
+                              YOUR WALLET OVERVIEW
+                            </span>
+                            <span style={{ fontSize: '12px', color: '#00AA13', fontWeight: 700 }}>● ON TRACK</span>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '14px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #EEF2EE', paddingBottom: '8px' }}>
+                              <span style={{ fontSize: '14px', color: '#54665C' }}>Total Cash (GoPay + Cash)</span>
+                              <strong style={{ fontSize: '15px', color: '#16261E' }}>{rp(f.cash)}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #EEF2EE', paddingBottom: '8px' }}>
+                              <span style={{ fontSize: '14px', color: '#54665C' }}>Protected for Bills (Rent/UKT)</span>
+                              <strong style={{ fontSize: '15px', color: '#E06D53' }}>- {rp(f.mandatory)}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #EEF2EE', paddingBottom: '8px' }}>
+                              <span style={{ fontSize: '14px', color: '#54665C' }}>Untouchable Emergency Reserve</span>
+                              <strong style={{ fontSize: '15px', color: '#00AA13' }}>- {rp(b.buffer)}</strong>
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F4FAF4', padding: '10px 14px', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#007A0E' }}>Available Free Cash:</span>
+                          <strong style={{ fontSize: '16px', color: '#00AA13' }}>
+                            {rp(Math.max(0, f.cash - f.mandatory - b.buffer))}
+                          </strong>
+                        </div>
+                      </div>
+
+                      {/* Card 3: Semester Outlook Banner */}
+                      <div className="radar-card" style={{ padding: '28px', background: f.gap ? '#FFF6F4' : '#F0FAF2', borderLeft: f.gap ? '4px solid #E06D53' : '4px solid #00AA13' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {f.gap ? <AlertCircle size={20} color="#E06D53" /> : <Smile size={20} color="#00AA13" />}
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: f.gap ? '#E06D53' : '#00AA13', textTransform: 'uppercase' }}>
+                            {f.gap ? 'DEFICIT RISK AHEAD' : 'HEALTHY BUFFER'}
+                          </span>
+                        </div>
+                        <h3 style={{ margin: '10px 0', fontSize: '20px', color: '#16261E' }}>
+                          {f.gap ? `Short by ${rp(f.gap)}` : `Surplus of ${rp(f.remainder)}`}
+                        </h3>
+                        <p style={{ margin: 0, fontSize: '14px', color: '#54665C', lineHeight: 1.5 }}>
+                          {f.gap
+                            ? 'You will run out before next allowance if spending continues as-is. Use Lever 1 & 2 to balance it!'
+                            : 'All scheduled rent and daily food needs are protected until next allowance!'}
+                        </p>
+                        <div style={{ marginTop: '16px' }}>
+                          <Button size="sm" variant="outline" onClick={() => setTab('levers')}>
+                            {f.gap ? 'Fix Gap with Levers →' : 'Explore Savings →'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* INTERACTIVE WHAT-IF SIMULATOR */}
+                    <section className="what-if-box" style={{ borderRadius: '14px' }}>
+                      <div className="what-if-header">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                          <ChameleonBadge size={44} />
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#00DF82', fontSize: '12px', fontWeight: 700 }}>
+                              <Sparkles size={15} /> WHAT-IF SPEND TESTER
+                            </div>
+                            <h3 style={{ margin: 0, fontSize: '18px' }}>Want to Hang Out or Treat Yourself Today?</h3>
+                            <p style={{ margin: 0, fontSize: '13px', color: '#B4C6BC' }}>
+                              Drag the slider to see how today&apos;s extra spending alters your daily allowance.
+                            </p>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '12px', color: '#88998F', textTransform: 'uppercase' }}>Planned Expense</span>
+                          <div style={{ fontSize: '26px', fontWeight: 700, color: whatIfSpend > 0 ? '#00DF82' : '#FFFFFF' }}>
+                            {rp(whatIfSpend)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="what-if-slider-wrap">
+                        <input
+                          type="range"
+                          min="0"
+                          max="150000"
+                          step="5000"
+                          value={whatIfSpend}
+                          onChange={(e) => setWhatIfSpend(Number(e.target.value))}
+                          className="what-if-slider"
+                          aria-label="Simulate discretionary expense"
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#88998F', marginTop: '6px' }}>
+                          <span>Rp 0 (None)</span>
+                          <span>Rp 30k (Boba / Snack)</span>
+                          <span>Rp 70k (Hangout)</span>
+                          <span>Rp 150k (Big Dinner)</span>
+                        </div>
+                      </div>
+
+                      <div className="what-if-metrics">
+                        <div className="what-if-metric">
+                          <span>New Daily Limit</span>
+                          <strong style={{ color: simulatedSafe < 10000 ? '#FFAA00' : '#00DF82' }}>
+                            {rp(simulatedSafe)} / day
+                          </strong>
+                          <small>{whatIfSpend > 0 ? `Decreases by ${rp(Math.max(0, f.safe - simulatedSafe))}/day` : 'Safe daily limit'}</small>
+                        </div>
+
+                        <div className="what-if-metric">
+                          <span>Remaining Balance</span>
+                          <strong>{rp(effectiveCash)}</strong>
+                          <small>After spending</small>
+                        </div>
+
+                        <div className="what-if-metric">
+                          <span>Surplus at Month-End</span>
+                          <strong style={{ color: simulatedSurplus < 0 ? '#FF5555' : '#FFFFFF' }}>
+                            {simulatedSurplus < 0 ? `Deficit ${rp(-simulatedSurplus)}` : rp(simulatedSurplus)}
+                          </strong>
+                          <small>Buffer remaining</small>
+                        </div>
+
+                        <div className="what-if-metric" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          {whatIfSpend > 0 ? (
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <Button
+                                className="primary"
+                                style={{ flex: 1, padding: '10px', fontSize: '12px' }}
+                                onClick={() => {
+                                  void handleQuickLog('Extra Discretionary Spend', whatIfSpend);
+                                  setWhatIfSpend(0);
+                                }}
+                              >
+                                Log Expense
+                              </Button>
+                              <Button
+                                variant="outline"
+                                style={{ padding: '10px', fontSize: '12px', color: '#fff', borderColor: 'rgba(255,255,255,0.2)' }}
+                                onClick={() => setWhatIfSpend(0)}
+                              >
+                                Reset
+                              </Button>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '13px', color: '#88998F' }}>Slide to test before you spend</span>
+                          )}
+                        </div>
+                      </div>
+                    </section>
+                  </>
+                )}
+              </TabsContent>
+
+              {/* TAB 2: 3 NON-DEBT ACTION LEVERS */}
+              <TabsContent value="levers">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '22px' }}>
+                  <ChameleonBadge size={44} />
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: '22px' }}>3 Action Levers (Zero Debt, Zero Interest)</h2>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#54665C' }}>
+                      When your wallet is tight, use these 3 proven moves instead of taking online loans or paylater.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="levers-grid">
+                  {/* Lever 1 */}
+                  <div className="lever-card">
+                    <div>
+                      <div className="lever-card-top">
+                        <span className="lever-number">LEVER 1 · SPEND SMARTER</span>
+                        <Leaf size={20} color="#00DF82" />
+                      </div>
+                      <h3>GoFood Campus Partner Deals</h3>
+                      <p>
+                        Switch from regular food delivery to student-rate canteens (Dallas UI, Kantin Kansas, or GoFood Hemat).
+                      </p>
+                      <div className="lever-impact">
+                        <SavingsIcon /> Saves ~Rp 20,000 per meal order.
+                      </div>
+                    </div>
+                    <Button className="primary" onClick={() => void handleActivateLever1()}>
+                      <Check size={16} /> Apply Meal Savings (Rp 15k)
+                    </Button>
+                  </div>
+
+                  {/* Lever 2 */}
+                  <div className="lever-card">
+                    <div>
+                      <div className="lever-card-top">
+                        <span className="lever-number">LEVER 2 · POSTPONE WANTS</span>
+                        <Clock3 size={20} color="#00DF82" />
+                      </div>
+                      <h3>The Deferral Vault</h3>
+                      <p>
+                        Delay optional hangouts or shopping past your next pocket money transfer without guilt.
+                      </p>
+                      <div className="lever-impact">
+                        <ProtectionIcon /> Instantly frees ~Rp 55,000 back into daily cash.
+                      </div>
+                    </div>
+                    <Button variant="outline" onClick={() => void handleActivateLever2()}>
+                      <Clock3 size={16} /> Postpone Optional Spend
+                    </Button>
+                  </div>
+
+                  {/* Lever 3 */}
+                  <div className="lever-card">
+                    <div>
+                      <div className="lever-card-top">
+                        <span className="lever-number">LEVER 3 · EARN EXTRA CASH</span>
+                        <Award size={20} color="#FFB800" />
+                      </div>
+                      <h3>Campus Gigs & Tutoring</h3>
+                      <p>
+                        Join university micro-tasks (lab assistant, survey respondent, or CDC student freelance).
+                      </p>
+                      <div className="lever-impact">
+                        <GrowthIcon /> Injects +Rp 45,000 to +Rp 200,000 upon completion.
+                      </div>
+                    </div>
+                    <Button className="primary" onClick={() => void handleActivateLever3()} style={{ background: '#00AA13' }}>
+                      <Plus size={16} /> Claim Campus Gig (+Rp 45k)
+                    </Button>
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* TAB 3: CAMPUS RADAR (UI ALTERNATIVES) */}
+              <TabsContent value="radar">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '22px' }}>
+                  <BirdBadge size={44} />
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: '22px' }}>UI Campus Alternatives Radar</h2>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#54665C' }}>
+                      Verified cheap spots around campus so you never overpay for food, transit, or study space.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="radar-filter-bar">
+                  <button
+                    type="button"
+                    className={`radar-filter-btn ${radarCategory === 'all' ? 'active' : ''}`}
+                    onClick={() => setRadarCategory('all')}
+                  >
+                    All Options
+                  </button>
+                  <button
+                    type="button"
+                    className={`radar-filter-btn ${radarCategory === 'mobility' ? 'active' : ''}`}
+                    onClick={() => setRadarCategory('mobility')}
+                  >
+                    <Bus size={15} style={{ display: 'inline', marginRight: '5px' }} /> Transit & Commute
+                  </button>
+                  <button
+                    type="button"
+                    className={`radar-filter-btn ${radarCategory === 'meals' ? 'active' : ''}`}
+                    onClick={() => setRadarCategory('meals')}
+                  >
+                    <Coffee size={15} style={{ display: 'inline', marginRight: '5px' }} /> Food & Canteens
+                  </button>
+                  <button
+                    type="button"
+                    className={`radar-filter-btn ${radarCategory === 'study' ? 'active' : ''}`}
+                    onClick={() => setRadarCategory('study')}
+                  >
+                    <BookOpen size={15} style={{ display: 'inline', marginRight: '5px' }} /> Free Study Pods
+                  </button>
+                </div>
+
+                <div className="radar-cards-grid">
+                  {(radarCategory === 'all' || radarCategory === 'mobility') && (
+                    <div className="radar-card">
+                      <span className="profile-tag" style={{ alignSelf: 'flex-start', marginBottom: '14px' }}>COMMUTE CHEAT SHEET</span>
+                      <h3>UI Bikun vs GoTransit vs GoRide</h3>
+                      <table className="radar-compare-table">
+                        <tbody>
+                          <tr><td>UI Bikun (Bus Kuning)</td><td><strong>Rp 0 (Free)</strong> · Every 8 mins</td></tr>
+                          <tr><td>GoTransit KRL (UI - Tebet)</td><td><strong>Rp 3,000</strong> · 22 mins</td></tr>
+                          <tr><td>Direct Motorbike Ride</td><td><strong>Rp 18,000</strong> · 15 mins</td></tr>
+                        </tbody>
+                      </table>
+                      <div className="lever-impact"><TipIcon /> Recommendation: Bikun + GoTransit saves Rp 15,000 every single trip.</div>
+                      <Button variant="outline" onClick={() => handleQuickLog('GoTransit KRL Fare', 3000)}>
+                        Log Transit (Rp 3k)
+                      </Button>
+                    </div>
+                  )}
+
+                  {(radarCategory === 'all' || radarCategory === 'meals') && (
+                    <div className="radar-card">
+                      <span className="profile-tag" style={{ alignSelf: 'flex-start', marginBottom: '14px' }}>MEAL CHOICES</span>
+                      <h3>Kantin Kansas / Dallas UI vs Food Delivery</h3>
+                      <table className="radar-compare-table">
+                        <tbody>
+                          <tr><td>Kantin Kansas (Nasi Ayam/Telur)</td><td><strong>Rp 12,000</strong></td></tr>
+                          <tr><td>GoFood Hemat Student Partner</td><td><strong>Rp 18,000</strong></td></tr>
+                          <tr><td>Regular Delivery + Delivery Fee</td><td><strong>Rp 38,000</strong></td></tr>
+                        </tbody>
+                      </table>
+                      <div className="lever-impact"><TipIcon /> Recommendation: Eating at campus canteens cuts food costs in half.</div>
+                      <Button variant="outline" onClick={() => handleQuickLog('Kantin Meal', 12000)}>
+                        Log Canteen Meal (Rp 12k)
+                      </Button>
+                    </div>
+                  )}
+
+                  {(radarCategory === 'all' || radarCategory === 'study') && (
+                    <div className="radar-card">
+                      <span className="profile-tag" style={{ alignSelf: 'flex-start', marginBottom: '14px' }}>STUDY SPACES</span>
+                      <h3>Crystal of Knowledge Library vs Commercial Café</h3>
+                      <table className="radar-compare-table">
+                        <tbody>
+                          <tr><td>UI Central Library (WiFi + AC)</td><td><strong>Rp 0 (Free)</strong></td></tr>
+                          <tr><td>Faculty Co-Working Corners</td><td><strong>Rp 0 (Free)</strong></td></tr>
+                          <tr><td>Commercial Coffee Shop (Margonda)</td><td><strong>Rp 45,000 min</strong></td></tr>
+                        </tbody>
+                      </table>
+                      <div className="lever-impact"><TipIcon /> Recommendation: Studying at UI library saves Rp 45,000 minimum cafe overhead.</div>
+                      <Button variant="outline" onClick={() => setMessage('Study session logged: Saved Rp 45,000 in cafe costs!')}>
+                        Check-in at Library
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
+              {/* TAB 4: COMMITMENTS (FIXED BILLS) */}
+              <TabsContent value="plans">
+                <div className="section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px', marginBottom: '22px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <ChameleonBadge size={44} />
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: '22px' }}>Your Fixed Bills & Commitments</h2>
+                      <p style={{ margin: 0, fontSize: '14px', color: '#54665C' }}>
+                        These costs are ring-fenced so you never accidentally spend rent money on hangouts.
+                      </p>
+                    </div>
+                  </div>
+                  {actions('plan', 'Add Fixed Bill')}
+                </div>
+
+                <div className="plan-grid">
+                  {s?.plans.map((p) => (
+                    <div key={p.id} className={'plan-card ' + (p.paid ? 'paid' : p.essential ? 'essential' : 'optional')}>
+                      <div className="plan-card-top">
+                        <span className="small-tag">{p.paid ? 'PAID' : p.essential ? 'ESSENTIAL (RENT/UKT)' : 'OPTIONAL'}</span>
+                        <span>{dt(p.due)}</span>
+                      </div>
+                      <h3>{p.title}</h3>
+                      <div className="plan-amount">{rp(p.amount)}</div>
+                      {p.deferredFrom && <small className="fine">Delayed from {dt(p.deferredFrom)}</small>}
+                      {!p.paid && (
+                        <div className="plan-actions">
+                          <Button size="sm" className="primary" onClick={() => show('pay', p.id)}>Mark Paid</Button>
+                          {!p.essential && <Button size="sm" variant="outline" onClick={() => show('defer', p.id)}>Postpone</Button>}
+                          <Button size="sm" variant="ghost" onClick={() => show('save', p.id)}>Cheaper Alt</Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </TabsContent>
+
+              {/* TAB 5: ECOSYSTEM SYNC & HISTORY */}
+              <TabsContent value="ecosystem">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '22px' }}>
+                  <ChameleonBadge size={44} />
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: '22px' }}>GoPay Sync & Activity History</h2>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#54665C' }}>
+                      Live simulated sync with GoPay QRIS and your latest expense logs.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="ecosystem-grid">
+                  <div className="ecosystem-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="profile-tag">GOPAY QRIS INTEGRATION</span>
+                      <span style={{ color: '#00AA13', fontSize: '12px', fontWeight: 700 }}>● CONNECTED</span>
+                    </div>
+                    <h3 style={{ marginTop: '12px' }}>Live Webhook Listener</h3>
+                    <p style={{ fontSize: '13px', color: '#54665C' }}>
+                      QRIS payments at campus canteens deduct automatically from today&apos;s safe allowance.
+                    </p>
+                    <div className="webhook-log">
+                      {webhookSimulated ? (
+                        <>
+                          [QRIS SETTLED] Kantin Dallas UI: Rp 16,000<br />
+                          Daily runway adjusted automatically in real time.
+                        </>
+                      ) : (
+                        'Awaiting simulated QRIS payment...'
+                      )}
+                    </div>
+                    <Button className="primary" style={{ width: '100%' }} onClick={() => void handleSimulateWebhook()}>
+                      <Radio size={14} /> Simulate QRIS Payment (Rp 16k)
+                    </Button>
+                  </div>
+
+                  <div className="ecosystem-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="profile-tag">RECENT EXPENSES</span>
+                      <span style={{ fontSize: '12px', color: '#54665C' }}>{s?.ledger.length ?? 0} entries</span>
+                    </div>
+                    <h3 style={{ marginTop: '12px' }}>Activity Log</h3>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {s?.ledger.slice(-5).reverse().map((e) => (
+                        <div key={e.id} className="ledger-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: '#F8FAF8', borderRadius: '6px', fontSize: '13px' }}>
+                          <span>{e.note}</span>
+                          <strong style={{ color: e.kind === 'income' ? '#00AA13' : '#16261E' }}>
+                            {e.kind === 'income' ? '+' : '-'}{rp(e.amount)}
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+            </div>
+          </Tabs>
+        </>
+      )}
+
+      {/* DIALOGS AND MODALS */}
+      <Dialog open={modal?.type === 'setup_custom' || modal?.type === 'budget'} onOpenChange={(open) => !open && setModal(null)}>
+        <DialogContent className="dialog-box">
+          <DialogTitle>{labels[modal?.type ?? '']}</DialogTitle>
+          <DialogDescription>Input your monthly pocket money, next allowance date, and bills.</DialogDescription>
+          <form onSubmit={onSubmitForm} className="form-grid">
+            <Field name="balance" label="Current Total Cash (GoPay + Cash in Wallet)" value={s?.budget?.initial ?? 850000} hint="Amount currently in your hands" />
+            <Field name="next" label="Next Allowance Date" type="date" value={s?.budget?.next ?? '2026-10-07'} hint="When will your parents or stipend send more cash?" />
+            <Field name="daily" label="Target Daily Spending Limit (Rp)" value={s?.budget?.daily ?? 25000} hint="Standard goal per day" />
+            <Field name="essentialDaily" label="Bare Minimum Daily Food & Commute (Rp)" value={s?.budget?.essentialDaily ?? 15000} hint="Absolute survival baseline" />
+            <Field name="buffer" label="Untouchable Emergency Cushion (Rp)" value={s?.budget?.buffer ?? 100000} hint="Do not touch for everyday hangouts" />
+            <Choice name="complete" checked={s?.budget?.complete ?? true}>Mark budget setup as complete</Choice>
+            <Choice name="consent" checked={Boolean(s?.consent ?? true)}>I agree to track cashflow with zero credit risk</Choice>
+            <Button type="submit" className="primary" disabled={busy}>Save My Runway</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modal?.type === 'daily'} onOpenChange={(open) => !open && setModal(null)}>
+        <DialogContent className="dialog-box">
+          <DialogTitle>Log Daily Expense</DialogTitle>
+          <DialogDescription>Quickly record an expense to update your daily safe limit.</DialogDescription>
+          <form onSubmit={onSubmitForm} className="form-grid">
+            <Field name="title" label="Description" type="text" value="Lunch at Canteen" />
+            <Field name="amount" label="Amount (Rp)" value={15000} />
+            <Button type="submit" className="primary" disabled={busy}>Log Expense</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modal?.type === 'plan'} onOpenChange={(open) => !open && setModal(null)}>
+        <DialogContent className="dialog-box">
+          <DialogTitle>Add Fixed Bill or Scheduled Need</DialogTitle>
+          <DialogDescription>Lock away money so you don&apos;t accidentally spend it.</DialogDescription>
+          <form onSubmit={onSubmitForm} className="form-grid">
+            <Field name="title" label="Bill Name (e.g. Kos Rent, WiFi, UKT)" type="text" value="Kos Rent" />
+            <Field name="amount" label="Amount (Rp)" value={600000} />
+            <Field name="due" label="Due Date" type="date" value={date ? plus(date, 14) : '2026-09-21'} />
+            <Choice name="essential" checked={true}>Essential bill (Must pay, cannot postpone)</Choice>
+            <Button type="submit" className="primary" disabled={busy}>Add Fixed Bill</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modal?.type === 'pay'} onOpenChange={(open) => !open && setModal(null)}>
+        <DialogContent className="dialog-box">
+          <DialogTitle>Mark Bill as Paid</DialogTitle>
+          <DialogDescription>Confirm payment for {plan?.title ?? 'this commitment'}.</DialogDescription>
+          <form onSubmit={onSubmitForm} className="form-grid">
+            <Field name="amount" label="Amount Paid (Rp)" value={plan?.amount ?? 0} />
+            <Button type="submit" className="primary" disabled={busy}>Confirm Paid</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modal?.type === 'defer'} onOpenChange={(open) => !open && setModal(null)}>
+        <DialogContent className="dialog-box">
+          <DialogTitle>Postpone Optional Expense</DialogTitle>
+          <DialogDescription>Move &quot;{plan?.title}&quot; past your next allowance to protect today&apos;s runway.</DialogDescription>
+          <form onSubmit={onSubmitForm} className="form-grid">
+            <Field name="due" label="New Scheduled Date" type="date" value={b ? plus(b.next, 2) : '2026-10-09'} />
+            <Button type="submit" className="primary" disabled={busy}>Postpone Expense</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modal?.type === 'save'} onOpenChange={(open) => !open && setModal(null)}>
+        <DialogContent className="dialog-box">
+          <DialogTitle>Choose Cheaper Alternative</DialogTitle>
+          <DialogDescription>Reduce cost for &quot;{plan?.title}&quot;.</DialogDescription>
+          <form onSubmit={onSubmitForm} className="form-grid">
+            <Field name="amount" label="Reduced Target Amount (Rp)" value={Math.max(5000, (plan?.amount ?? 20000) - 15000)} />
+            <Button type="submit" className="primary" disabled={busy}>Apply Savings</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modal?.type === 'formula'} onOpenChange={(open) => !open && setModal(null)}>
+        <DialogContent className="dialog-box">
+          <DialogTitle>How Safe-to-Spend is Calculated</DialogTitle>
+          <DialogDescription>The honest, deterministic equation protecting students from debt.</DialogDescription>
+          <div style={{ background: '#F4FAF4', border: '1px solid #00AA13', padding: '18px', borderRadius: '10px', margin: '18px 0' }}>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: '#00AA13', textAlign: 'center' }}>
+              Safe Today = (B − C − R) ÷ Days Left
+            </div>
+            <div style={{ marginTop: '14px', fontSize: '14px', color: '#16261E', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div>• <strong>B (Balance):</strong> Cash currently in GoPay + Wallet</div>
+              <div>• <strong>C (Commitments):</strong> Locked money for upcoming rent & UKT</div>
+              <div>• <strong>R (Reserve):</strong> Untouchable safety emergency cushion</div>
+              <div>• <strong>Days:</strong> Days remaining until next monthly pocket money</div>
+            </div>
+          </div>
+          <Button type="button" className="primary" onClick={() => setModal(null)}>Got It!</Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* FOOTER */}
+      <footer style={{ marginTop: '54px', paddingTop: '24px', borderTop: '1px solid rgba(0, 170, 19, 0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', fontSize: '13px', color: '#54665C' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <ChameleonBadge size={28} />
+          <span>SakuJalan · Universitas Indonesia Pilot · Gojek Champointship 2026</span>
+        </div>
+        <div style={{ display: 'flex', gap: '20px' }}>
+          <button type="button" onClick={() => show('formula')} style={{ background: 'none', border: 'none', color: '#00AA13', cursor: 'pointer', fontSize: '13px', fontWeight: 700 }}>
+            Formula Guide
+          </button>
+          <button type="button" onClick={() => show('setup_custom')} style={{ background: 'none', border: 'none', color: '#00AA13', cursor: 'pointer', fontSize: '13px', fontWeight: 700 }}>
+            Reconfigure Budget
+          </button>
+        </div>
+      </footer>
+    </main>
+  );
 }

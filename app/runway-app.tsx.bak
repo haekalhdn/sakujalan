@@ -1,0 +1,896 @@
+'use client';
+/* oxlint-disable next/no-html-link-for-pages, react/react-compiler -- SIWC and file downloads require top-level/plain anchors. */
+import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
+import { Wallet, ArrowRight, ShieldCheck, Plus, ArrowUpRight, ArrowDownLeft, CalendarDays, Check, Info, RefreshCw, X, Leaf, Clock3, Download, Trash2, LayoutDashboard, ListChecks, Banknote, History, Settings2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription } from '@/components/ui/alert-dialog';
+import { plus, type State, type Command, type forecast } from '@/lib/runway';
+
+type Data = { state: State; version: number; date: string; forecast: ReturnType<typeof forecast> };
+type Modal = { type: string; id?: string } | null;
+
+const rp = (v: number) => 'Rp ' + v.toLocaleString('en-US');
+const dt = (v: string) => new Date(v + 'T00:00:00Z').toLocaleDateString('en-US', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
+const labels: Record<string, string> = {
+  budget: 'Configure Allowance & Budget',
+  plan: 'Add Scheduled Commitment',
+  pay: 'Record Payment Confirmation',
+  save: 'Choose Cheaper Alternative',
+  defer: 'Defer Optional Expense',
+  daily: 'Record Daily Expense',
+  expense: 'Record Additional Expense',
+  income: 'Record Received Income',
+  pending: 'Record Pending Income',
+  receive: 'Confirm Income Received',
+  refund: 'Record Refund',
+  transfer: 'Transfer Between Own Accounts',
+  check: 'Daily Essential Needs Check',
+  formula: 'Deterministic Cash-Flow Logic',
+};
+
+function Field({ name, label, value, type = 'number', min = 0, max = 100000000, hint }: { name: string; label: string; value?: string | number; type?: string; min?: string | number; max?: string | number; hint?: string }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <Input
+        name={name}
+        type={type}
+        defaultValue={value}
+        min={type === 'text' ? undefined : min}
+        max={type === 'text' ? undefined : max}
+        maxLength={type === 'text' ? 100 : undefined}
+        step={type === 'number' ? 1 : undefined}
+        required
+        inputMode={type === 'number' ? 'numeric' : undefined}
+      />
+      {hint && <small>{hint}</small>}
+    </label>
+  );
+}
+
+function Choice({ name, children, checked = false }: { name: string; children: React.ReactNode; checked?: boolean }) {
+  return (
+    <label className="choice">
+      <Checkbox name={name} defaultChecked={checked} />
+      <span>{children}</span>
+    </label>
+  );
+}
+
+interface RunwayAppProps {
+  onBackToLanding?: () => void;
+}
+
+export default function RunwayApp({ onBackToLanding }: RunwayAppProps = {}) {
+  const [data, setData] = useState<Data | null>(null);
+  const [tab, setTab] = useState('summary');
+  const [modal, setModal] = useState<Modal>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [signIn, setSignIn] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const pending = useRef<{ serialized: string; requestId: string } | null>(null);
+
+  const load = async () => {
+    setError('');
+    try {
+      const r = await fetch('/api/state', { cache: 'no-store' });
+      const d = (await r.json()) as Data & { error?: string };
+      if (!r.ok) {
+        setSignIn(r.status === 401);
+        throw Error(d.error || 'Unable to open student records.');
+      }
+      setData(d);
+      setSignIn(false);
+      pending.current = null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Connection interrupted.');
+    } finally {
+      setLoaded(true);
+    }
+  };
+
+  // Loading is the effect's external synchronization target.
+  // oxlint-disable-next-line react/react-compiler
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const show = (type: string, id?: string) => {
+    setError('');
+    setMessage('');
+    setModal({ type, id });
+  };
+
+  const mutate = async (command: Command) => {
+    if (!data || busy) return;
+    setBusy(true);
+    setError('');
+    setMessage('');
+    const serialized = JSON.stringify(command);
+    if (!pending.current || pending.current.serialized !== serialized) {
+      pending.current = { serialized, requestId: crypto.randomUUID() };
+    }
+    try {
+      const r = await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Runway-Request': '1' },
+        body: JSON.stringify({ command, version: data.version, requestId: pending.current.requestId }),
+      });
+      const d = (await r.json()) as Data & { error?: string };
+      if (!r.ok) {
+        if (r.status === 401) setSignIn(true);
+        throw Error(d.error || 'Unable to save record.');
+      }
+      setData(d);
+      setModal(null);
+      setDeleting(false);
+      pending.current = null;
+      setMessage(command.type === 'delete' ? 'Record successfully removed.' : 'Saved. Forecast updated.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Connection interrupted. Please reload to verify.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    const context = (document as Document & { modelContext?: { registerTool: (tool: unknown, options: unknown) => Promise<void> | void } }).modelContext;
+    if (!context) return;
+    const lifecycle = new AbortController();
+    try {
+      void Promise.resolve(
+        context.registerTool(
+          {
+            name: 'open_runway_entry_form',
+            description: 'Opens entry form for student review. Does not deduct money or alter balances.',
+            inputSchema: {
+              type: 'object',
+              properties: { kind: { type: 'string', enum: ['daily', 'expense', 'income', 'plan', 'pending'] } },
+              required: ['kind'],
+              additionalProperties: false,
+            },
+            annotations: { readOnlyHint: false },
+            execute: (input: unknown) => {
+              const kind = (input as { kind?: string })?.kind;
+              if (!kind || !['daily', 'expense', 'income', 'plan', 'pending'].includes(kind) || !data?.state.budget) {
+                throw Error('Invalid entry type or budget has not been configured yet.');
+              }
+              show(kind);
+              return { opened: kind, saved: false };
+            },
+          },
+          { signal: lifecycle.signal }
+        )
+      ).catch(() => {});
+    } catch {
+      // Browsers without modelContext fall back gracefully.
+    }
+    return () => lifecycle.abort();
+  }, [data?.state.budget]);
+
+  const s = data?.state;
+  const f = data?.forecast;
+  const b = s?.budget;
+  const date = data?.date;
+
+  const plan = s?.plans.find((p) => p.id === modal?.id);
+  const income = s?.incomes.find((i) => i.id === modal?.id);
+  const entry = s?.ledger.find((e) => e.id === modal?.id);
+
+  const submit = (event: SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    const command: Command = { type: modal!.type };
+    if (modal?.id) command.id = modal.id;
+    for (const [k, v] of values) {
+      const value = typeof v === 'string' ? v : '';
+      command[k] = ['balance', 'daily', 'essentialDaily', 'buffer', 'amount'].includes(k) ? Number(value) : value;
+    }
+    for (const k of ['complete', 'consent', 'essential', 'met', 'emergency']) {
+      if (['budget', 'plan', 'check'].includes(command.type)) {
+        command[k] = values.has(k);
+      }
+    }
+    void mutate(command);
+  };
+
+  const actions = (kind: string, label: string, Icon = Plus) => (
+    <Button variant="outline" className="action-button" onClick={() => show(kind)}>
+      <Icon size={16} />
+      {label}
+    </Button>
+  );
+
+  return (
+    <main className="shell">
+      <a className="skip" href="#content">Skip navigation</a>
+
+      {/* SAKUJALAN UNIFIED HEADER */}
+      <header className="targo-app-header">
+        <button
+          type="button"
+          className="targo-app-brand"
+          onClick={onBackToLanding}
+          style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: onBackToLanding ? 'pointer' : 'default' }}
+          aria-label="Back to SakuJalan Home"
+        >
+          <div className="targo-brand-mark" />
+          <div className="targo-brand-text-wrap">
+            <span className="targo-brand-name">sakujalan</span>
+            <span className="targo-brand-sub">Campus Budget Navigator</span>
+          </div>
+        </button>
+
+        <div className="targo-app-right">
+          <span className="targo-telemetry-badge">
+            <ShieldCheck size={14} /> 01 / MANUAL AUDIT MODE
+          </span>
+          {data && (
+            <Button variant="ghost" aria-label="Reload records" onClick={() => void load()}>
+              <RefreshCw size={16} />
+            </Button>
+          )}
+          {onBackToLanding && (
+            <button
+              type="button"
+              className="targo-btn-chamfer"
+              onClick={onBackToLanding}
+            >
+              ← BACK TO LANDING
+            </button>
+          )}
+        </div>
+      </header>
+
+      {message && <output className="notice success"><Check size={18} />{message}</output>}
+      {error && !modal && !deleting && (
+        <div className="notice error" role="alert">
+          <Info size={18} />
+          <span>{error}</span>
+          {!signIn && <Button variant="outline" onClick={() => void load()}>Reload</Button>}
+        </div>
+      )}
+
+      {!b ? (
+        <section id="content" className="welcome">
+          <div>
+            <span className="eyebrow">CAMPUS BUDGET NAVIGATOR</span>
+            <h1>Know What Is Left.<br />Keep College Moving.</h1>
+            <p>
+              See exactly what you can safely spend today, while protecting scheduled commitments until your next allowance transfer.
+            </p>
+            {!loaded ? (
+              <output>Opening student records…</output>
+            ) : signIn ? (
+              <a className="link-primary" href="/signin-with-chatgpt?return_to=%2F" target="_top">
+                Sign in to open records <ArrowRight size={18} />
+              </a>
+            ) : data ? (
+              <Button className="primary" onClick={() => show('budget')}>
+                Configure Your Budget <ArrowRight />
+              </Button>
+            ) : (
+              <Button onClick={() => void load()}>Try Again</Button>
+            )}
+            <p className="fine">
+              Initial pilot version for limited evaluation. Not an official Gojek banking service. Does not execute money custody or transfers.
+            </p>
+          </div>
+
+          <aside className="hero-card welcome-preview">
+            <div className="card-top">
+              <span><Wallet size={18} /> SAKUJALAN PREVIEW</span>
+              <span className="small-tag">LIVE PLAN</span>
+            </div>
+            <div style={{ margin: '24px 0' }}>
+              <small style={{ color: '#00DF82', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '11px', display: 'block' }}>
+                SAFE TO SPEND TODAY (B - C - R)
+              </small>
+              <div className="big-money">Rp 48,000</div>
+              <span style={{ color: '#B4C6BC', fontSize: '13px' }}>Safe until next Friday transfer</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px', fontSize: '12px', color: '#B4C6BC' }}>
+              <div><span>Today</span>: <strong>Rp 48k</strong></div>
+              <div><span>Commitments</span>: <strong>Rp 125k</strong></div>
+              <div><span>Allowance</span>: <strong>Friday</strong></div>
+            </div>
+            <p style={{ fontSize: '11px', color: '#88998F', marginTop: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <ShieldCheck size={14} /> No bank account connection or PIN required.
+            </p>
+          </aside>
+        </section>
+      ) : (
+        <>
+          <div className="page-heading">
+            <div>
+              <span className="eyebrow">{date && dt(date)} · JAKARTA TIME</span>
+              <h1>Room For What Truly Matters.</h1>
+              <p>Your plan until {dt(b.next)}. One mindful choice, clear college path.</p>
+            </div>
+            <Button className="primary" onClick={() => show('daily')}>
+              <Plus /> Record Daily Expense
+            </Button>
+          </div>
+
+          <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
+            <TabsList className="main-tabs" aria-label="Application Sections">
+              <TabsTrigger value="summary"><LayoutDashboard />Summary</TabsTrigger>
+              <TabsTrigger value="plans"><ListChecks />Commitments</TabsTrigger>
+              <TabsTrigger value="income"><Banknote />Income</TabsTrigger>
+              <TabsTrigger value="activity"><History />Activity</TabsTrigger>
+              <TabsTrigger value="data"><Settings2 />Data Control</TabsTrigger>
+            </TabsList>
+
+            <div id="content">
+              {/* TAB 1: SUMMARY */}
+              <TabsContent value="summary">
+                {f && (
+                  <>
+                    {(!f.complete || f.expired || f.unconfirmed) && (
+                      <div className="notice warning">
+                        <Info size={20} />
+                        <div>
+                          <strong>
+                            {f.expired ? 'Allowance date has arrived.' : !f.complete ? 'Data needs completion.' : "Review today&apos;s records."}
+                          </strong>
+                          <p>
+                            {f.expired
+                              ? 'Balance does not auto-increment. Record verified receipts, then update your next allowance cycle.'
+                              : !f.complete
+                              ? 'Provisional estimate: essential balances or bills may still be unrecorded.'
+                              : "Record any missed spending before relying on this daily guide, then complete today&apos;s check-in."}
+                          </p>
+                        </div>
+                        <Button variant="outline" onClick={() => show(f.expired || !f.complete ? 'budget' : 'check')}>
+                          Update
+                        </Button>
+                      </div>
+                    )}
+
+                    <div className="summary-grid">
+                      {/* Cash Card */}
+                      <section className="hero-card cash-card">
+                        <div className="card-top">
+                          <span><Wallet size={18} /> Available to spend today</span>
+                          <span className="small-tag">{f.expired ? 'Renewal Needed' : 'Discretionary'}</span>
+                        </div>
+                        <div className="big-money">{rp(f.safe)}</div>
+                        <p>
+                          Derived from <code>(B - C - R) / days</code> after scheduled obligations, reserve buffer, and minimum essential daily costs.
+                        </p>
+
+                        {!f.expired && (
+                          <div className="runway-signal" aria-label="Balance trajectory signal">
+                            <div className="signal-bars">
+                              {f.points.slice(0, 10).map((p, index) => {
+                                const ceiling = Math.max(1, ...f.points.map((pt) => Math.abs(pt.balance)));
+                                return (
+                                  <i
+                                    key={p.date}
+                                    className={p.balance < 0 ? 'below' : ''}
+                                    style={{
+                                      height: `${Math.max(12, Math.round((Math.abs(p.balance) / ceiling) * 100))}%`,
+                                      animationDelay: `${index * 45}ms`,
+                                    }}
+                                  />
+                                );
+                              })}
+                            </div>
+                            <div className="signal-caption">
+                              <span>Today</span>
+                              <span>{dt(b.next)}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="card-bottom">
+                          <span><CalendarDays size={18} />{f.expired ? 'Schedule renewal' : `${f.horizon} days until ${dt(b.next)}`}</span>
+                          <button onClick={() => show('formula')}>
+                            Calculation logic <ArrowRight size={16} />
+                          </button>
+                        </div>
+                      </section>
+
+                      {/* Outlook Panel */}
+                      <section className={'outlook panel ' + (f.gap ? 'caution' : 'calm')}>
+                        <span className="eyebrow">HORIZON PROJECTION</span>
+                        <h2>
+                          {f.expired
+                            ? 'Period Needs Renewal'
+                            : f.critical
+                            ? 'Essential Commitments Uncovered'
+                            : f.gap
+                            ? 'Funding Gap Detected'
+                            : f.complete
+                            ? 'Projected to Suffice'
+                            : 'Provisional Estimate'}
+                        </h2>
+                        <div className="medium-money">{f.expired ? '—' : f.gap ? rp(f.gap) : rp(f.remainder)}</div>
+                        <p>
+                          {f.expired
+                            ? 'Do not use past projection as a benchmark for the new funding cycle.'
+                            : f.gap
+                            ? 'Estimated shortfall before the next allowance arrival.'
+                            : 'Estimated end surplus before user safety reserve.'}
+                        </p>
+                        {f.reserveGap > 0 && !f.expired && <p>Safety reserve still short by {rp(f.reserveGap)}.</p>}
+                        <Button variant="outline" onClick={() => setTab('plans')}>
+                          Review Commitments <ArrowRight />
+                        </Button>
+                      </section>
+                    </div>
+
+                    {/* Stats */}
+                    <div className="stats">
+                      <div>
+                        <span>Reconciled Balance (B)</span>
+                        <strong>{rp(f.cash)}</strong>
+                        <small>Manual tracking, not live bank connection</small>
+                      </div>
+                      <div>
+                        <span>Unpaid Commitments (C)</span>
+                        <strong>{rp(f.mandatory)}</strong>
+                        <small>Earmarked allocation, not locked funds</small>
+                      </div>
+                      <div>
+                        <span>Spent Today</span>
+                        <strong>{rp(f.spentToday)}</strong>
+                        <small>Deducted from today&apos;s safe allowance</small>
+                      </div>
+                    </div>
+
+                    {/* Section Grid */}
+                    <div className="section-grid">
+                      <section className="panel">
+                        <div className="section-title">
+                          <h2>Upcoming Commitments</h2>
+                          <button onClick={() => setTab('plans')}>View all <ArrowUpRight size={16} /></button>
+                        </div>
+                        {s!.plans
+                          .filter((p) => !p.paid)
+                          .sort((a, c) => a.due.localeCompare(c.due))
+                          .slice(0, 3)
+                          .map((p) => (
+                            <div className="upcoming" key={p.id}>
+                              <div className="date-box">{dt(p.due)}</div>
+                              <div>
+                                <strong>{p.title}</strong>
+                                <p>{p.essential ? 'Essential (Mandatory)' : 'Discretionary (Optional)'}</p>
+                              </div>
+                              <b>{rp(p.amount)}</b>
+                            </div>
+                          ))}
+                        {!s!.plans.some((p) => !p.paid) && (
+                          <div className="empty-state">
+                            <ListChecks />
+                            <p>No upcoming commitments scheduled. Add bills or course materials so funds are accounted for.</p>
+                            <Button variant="outline" onClick={() => show('plan')}>Add Commitment</Button>
+                          </div>
+                        )}
+                      </section>
+
+                      <section className="panel check-card">
+                        <span className="icon-square"><Check /></span>
+                        <h2>Were Needs Met Today?</h2>
+                        <p>A quick daily check helps distinguish an optimistic plan on paper from everyday reality.</p>
+                        <Button variant="outline" onClick={() => show('check')}>
+                          {s!.checks.some((c) => c.date === date) ? 'Update Today&apos;s Check' : 'Submit Today&apos;s Check'}
+                        </Button>
+                      </section>
+                    </div>
+
+                    {!f.expired && (
+                      <details className="panel">
+                        <summary>View Daily Balance Trajectory <span className="fine">Commitment schedule + daily average</span></summary>
+                        <p className="fine">Pending income is strictly omitted until confirmed received. Risk dates reflect the plan, not bank guarantees.</p>
+                        <div className="timeline">
+                          {f.points.map((p) => (
+                            <div key={p.date}>
+                              <span>{dt(p.date)}</span>
+                              <strong className={p.balance < 0 ? 'negative' : ''}>
+                                {p.balance < 0 ? 'Shortfall ' + rp(-p.balance) : rp(p.balance)}
+                              </strong>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </>
+                )}
+              </TabsContent>
+
+              {/* TAB 2: COMMITMENTS */}
+              <TabsContent value="plans">
+                <div className="section-title">
+                  <div>
+                    <h2>Commitments, Not Just a List.</h2>
+                    <p>Costs recorded here are separated from daily spending. Do not record the same expense twice.</p>
+                  </div>
+                  {actions('plan', 'Add Commitment')}
+                </div>
+
+                <div className="plan-grid">
+                  {s!.plans.map((p) => (
+                    <article className="panel plan-card" key={p.id}>
+                      <div className="card-top">
+                        <span className={'tag ' + (p.essential ? 'essential' : '')}>
+                          {p.paid ? 'Paid' : p.essential ? 'Essential' : 'Optional'}
+                        </span>
+                        <span className="fine">{dt(p.due)}</span>
+                      </div>
+                      <h2>{p.title}</h2>
+                      <strong className="plan-money">{rp(p.amount)}</strong>
+                      {p.original > p.amount && (
+                        <p className="saving"><Leaf size={16} /> Saved via cheaper alternative: {rp(p.original - p.amount)}</p>
+                      )}
+                      {p.deferredFrom && <p>Deferred from {dt(p.deferredFrom)}; commitment remains recorded.</p>}
+                      {!p.paid && (
+                        <div className="plan-actions">
+                          <Button className="primary" onClick={() => show('pay', p.id)}>Mark as Paid</Button>
+                          <Button variant="outline" onClick={() => show('save', p.id)}>Cheaper Option</Button>
+                          {!p.essential && <Button variant="outline" onClick={() => show('defer', p.id)}>Defer</Button>}
+                          {p.original > p.amount && (
+                            <Button variant="ghost" disabled={busy} onClick={() => void mutate({ type: 'undoSave', id: p.id })}>
+                              Undo Alternative
+                            </Button>
+                          )}
+                          {p.deferredFrom && (
+                            <Button variant="ghost" disabled={busy} onClick={() => void mutate({ type: 'undoDefer', id: p.id })}>
+                              Undo Deferral
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+
+                {!s!.plans.length && (
+                  <div className="empty-state panel">
+                    <ListChecks />
+                    <h2>Start with your nearest commitment.</h2>
+                    <p>For example, boarding house rent or semester textbooks. You choose amounts and target due dates.</p>
+                  </div>
+                )}
+
+                <div className="notice">
+                  <Info />
+                  <p>Cheaper options revise planned cost without altering current balance. Deferral applies strictly to optional items. Payment settles the commitment and deducts cash once.</p>
+                </div>
+              </TabsContent>
+
+              {/* TAB 3: INCOME */}
+              <TabsContent value="income">
+                <div className="section-title">
+                  <div>
+                    <h2>Income Status: Real & Transparent.</h2>
+                    <p>Pending funds cannot be treated as available money until actually received.</p>
+                  </div>
+                  <div className="button-row">
+                    {actions('pending', 'Pending Income', Clock3)}
+                    {actions('income', 'Confirmed Received', ArrowDownLeft)}
+                  </div>
+                </div>
+
+                <div className="stats two">
+                  <div>
+                    <span>Pending Work / Honor</span>
+                    <strong>{rp(f?.pending ?? 0)}</strong>
+                    <small>Does not inflate available balance or end projection</small>
+                  </div>
+                  <div>
+                    <span>Confirmed Upon Receipt</span>
+                    <p>Record only the net amount deposited, never hypothetical earnings.</p>
+                  </div>
+                </div>
+
+                {s!.incomes.map((i) => (
+                  <article className="panel income-row" key={i.id}>
+                    <span className="icon-square"><Banknote /></span>
+                    <div>
+                      <h3>{i.title}</h3>
+                      <p>{dt(i.due)} · {i.status === 'received' ? 'Deposit confirmed' : 'Awaiting deposit'}</p>
+                    </div>
+                    <strong>{rp(i.amount)}</strong>
+                    {i.status === 'waiting' && (
+                      <Button className="primary" onClick={() => show('receive', i.id)}>Confirm Received</Button>
+                    )}
+                  </article>
+                ))}
+
+                <section className="panel empty-state">
+                  <ShieldCheck />
+                  <h2>Verified Campus Opportunity Board</h2>
+                  <p>Opportunities from UI Career Development Center (CDC) and faculty portals will surface here once verified. Record personal freelance arrangements manually.</p>
+                </section>
+              </TabsContent>
+
+              {/* TAB 4: ACTIVITY */}
+              <TabsContent value="activity">
+                <div className="section-title">
+                  <div>
+                    <h2>Every Expense & Receipt Has an Audit Trail.</h2>
+                    <p>Amounts recorded with Jakarta timestamp.</p>
+                  </div>
+                </div>
+                <div className="button-row activity-buttons">
+                  {actions('daily', 'Daily Spending')}
+                  {actions('expense', 'Additional Expense')}
+                  {actions('income', 'Received Income')}
+                  {actions('transfer', 'Internal Transfer')}
+                </div>
+
+                <section className="panel ledger">
+                  {[...s!.ledger].reverse().map((e) => (
+                    <div className="ledger-row" key={e.id}>
+                      <span className={'icon-square ' + (['income', 'refund'].includes(e.kind) ? 'credit' : '')}>
+                        {['income', 'refund'].includes(e.kind) ? <ArrowDownLeft /> : <ArrowUpRight />}
+                      </span>
+                      <div>
+                        <strong>{e.note}</strong>
+                        <p>
+                          {dt(e.date)} ·{' '}
+                          {
+                            {
+                              daily: 'Daily allowance expenditure',
+                              expense: 'Unscheduled additional expense',
+                              payment: 'Commitment settlement',
+                              income: 'Income received',
+                              refund: 'Refund credited',
+                              transfer: 'Internal account transfer',
+                            }[e.kind]
+                          }
+                        </p>
+                      </div>
+                      <b>
+                        {e.kind === 'transfer'
+                          ? 'Balance unchanged'
+                          : (['income', 'refund'].includes(e.kind) ? '+' : '−') + rp(e.amount)}
+                      </b>
+                      {['daily', 'expense', 'payment'].includes(e.kind) && (
+                        <Button variant="ghost" onClick={() => show('refund', e.id)}>Refund</Button>
+                      )}
+                    </div>
+                  ))}
+                  {!s!.ledger.length && (
+                    <div className="empty-state">
+                      <History />
+                      <h2>No financial transactions recorded yet.</h2>
+                      <p>Commitments stay in Commitments. Activity logs transactions that actually materialized.</p>
+                    </div>
+                  )}
+                </section>
+              </TabsContent>
+
+              {/* TAB 5: DATA CONTROL */}
+              <TabsContent value="data">
+                <div className="section-grid">
+                  <section className="panel">
+                    <span className="eyebrow">ALLOWANCE PARAMETERS</span>
+                    <h2>Adjust to Your Actual Situation.</h2>
+                    <dl>
+                      <div><dt>Next expected allowance</dt><dd>{dt(b.next)}</dd></div>
+                      <div><dt>Planned daily allowance</dt><dd>{rp(b.daily)}</dd></div>
+                      <div><dt>Minimum daily essentials</dt><dd>{rp(b.essentialDaily)}</dd></div>
+                      <div><dt>Target safety reserve (R)</dt><dd>{rp(b.buffer)}</dd></div>
+                      <div><dt>Data completeness</dt><dd>{b.complete ? 'Confirmed complete' : 'Incomplete'}</dd></div>
+                    </dl>
+                    <Button variant="outline" onClick={() => show('budget')}>Edit Budget Parameters</Button>
+                  </section>
+
+                  <section className="panel">
+                    <span className="eyebrow">DATA SOVEREIGNTY</span>
+                    <h2>Your Records Stay Yours.</h2>
+                    <p>All budgets, commitments, and logs remain strictly within your device session. No bank scraping or credential storage.</p>
+                    <div className="button-row">
+                      <a className="link-outline" href="/api/export" download>
+                        <Download size={18} /> Export JSON Records
+                      </a>
+                      <Button variant="outline" className="danger" onClick={() => { setError(''); setDeleting(true); }}>
+                        <Trash2 /> Delete Records
+                      </Button>
+                    </div>
+                    <a className="text-link" href="/signout-with-chatgpt?return_to=%2F" target="_top">Sign out of session</a>
+                  </section>
+                </div>
+
+                <section className="panel">
+                  <h2>Empirical Well-Being Records (Not Assumed Results).</h2>
+                  <div className="stats two">
+                    <div><span>Days checked-in</span><strong>{s!.checks.length}</strong></div>
+                    <div><span>Days essentials unmet</span><strong>{s!.checks.filter((c) => !c.met).length}</strong></div>
+                  </div>
+                  <p>
+                    {s!.checks.filter((c) => c.emergency).length} days involved emergency borrowing or informal relief. Transparent reporting without distorting evidence.
+                  </p>
+                </section>
+              </TabsContent>
+            </div>
+          </Tabs>
+
+          <footer>
+            SakuJalan · Pilot concept · Universitas Indonesia initial cohort · Not an official Gojek banking service · No credit or loans offered.
+          </footer>
+        </>
+      )}
+
+      {/* DIALOG MODAL */}
+      <Dialog open={!!modal} onOpenChange={(v) => { if (!v && !busy) { setModal(null); setError(''); } }}>
+        <DialogContent className="runway-dialog" showCloseButton={false}>
+          <div className="dialog-heading">
+            <DialogTitle>{labels[modal?.type ?? ''] ?? 'Entry Form'}</DialogTitle>
+            <Button variant="ghost" aria-label="Close dialog" disabled={busy} onClick={() => { setModal(null); setError(''); }}>
+              <X />
+            </Button>
+          </div>
+          <DialogDescription>
+            {modal?.type === 'budget'
+              ? 'Balances do not include credit limits or borrowed money.'
+              : modal?.type === 'formula'
+              ? 'Calculations follow deterministic user-entered records, not bank sync.'
+              : 'Verify amount and details before saving. This is budget navigation, not a financial transaction.'}
+          </DialogDescription>
+
+          {modal?.type === 'formula' && f && b ? (
+            <div className="formula">
+              <dl>
+                <div><dt>Available Spendable Cash (B)</dt><dd>{rp(f.cash)}</dd></div>
+                <div><dt>Scheduled Commitments (C)</dt><dd>{rp(f.mandatory + f.optional)}</dd></div>
+                <div><dt>User Safety Reserve (R)</dt><dd>{rp(b.buffer)}</dd></div>
+                <div><dt>Daily Spending Already Paid Today</dt><dd>{rp(f.spentToday)}</dd></div>
+                <div><dt>Remaining Spending Days</dt><dd>{f.horizon} days</dd></div>
+              </dl>
+              <p>
+                <strong>Available Discretionary Funds</strong> = <code>B - C - R</code>.
+              </p>
+              <p>
+                Daily Safe Allowance = <code>(B + spentToday - C - R) / remainingDays - spentToday</code>. Floor-bounded at 0.
+              </p>
+              <p>
+                Pending earnings are strictly excluded until confirmed received. Essential Cash Shortfall = <code>max(0, C - B)</code>.
+              </p>
+            </div>
+          ) : (
+            <form
+              key={modal?.type + ':' + (modal?.id ?? '')}
+              onSubmit={submit}
+              onInvalidCapture={(e) => {
+                const t = e.target as HTMLInputElement;
+                t.setCustomValidity(t.validity.valueMissing ? 'This field is required.' : 'Check values and bounds.');
+                setError('Please correct the highlighted inputs.');
+              }}
+              onInput={(e) => (e.target as HTMLInputElement).setCustomValidity?.('')}
+            >
+              {modal?.type === 'budget' && (
+                <>
+                  <div className="form-grid">
+                    {!b && <Field name="balance" label="Current Available Balance (Rp)" hint="Combine cash in wallet and spendable bank balances." />}
+                    <Field
+                      name="next"
+                      label="Next Expected Allowance Date"
+                      type="date"
+                      value={b?.next ?? (date ? plus(date, 30) : '')}
+                      min={date ? plus(date, 1) : undefined}
+                      max={date ? plus(date, 90) : undefined}
+                    />
+                    <Field name="daily" label="Target Daily Spending (Rp)" value={b?.daily} hint="Outside scheduled major commitments." />
+                    <Field name="essentialDaily" label="Minimum Essential Daily Cost (Rp)" value={b?.essentialDaily} hint="Baseline food/travel essentials." />
+                    <Field name="buffer" label="Safety Reserve (Rp)" value={b?.buffer ?? 0} hint="Untouchable emergency buffer R." />
+                  </div>
+                  <Choice name="complete" checked={b?.complete}>
+                    Balance and major commitments accounted for.
+                  </Choice>
+                  <Choice name="consent" checked={!!s?.consent}>
+                    I agree to store these planning inputs for this device session. I can export or delete them anytime.
+                  </Choice>
+                </>
+              )}
+
+              {modal?.type === 'plan' && (
+                <>
+                  <Field name="title" label="Commitment Title" type="text" hint="e.g. Boarding House Rent, Course Materials" />
+                  <div className="form-grid">
+                    <Field name="amount" label="Planned Amount (Rp)" min={1} />
+                    <Field name="due" label="Due Date" type="date" min={date} max={date ? plus(date, 180) : undefined} value={date} />
+                  </div>
+                  <Choice name="essential" checked>
+                    Essential commitment (cannot be deferred).
+                  </Choice>
+                </>
+              )}
+
+              {['pay', 'save', 'receive', 'refund'].includes(modal?.type ?? '') && (
+                <>
+                  <p className="selected-record">{plan?.title ?? income?.title ?? entry?.note}</p>
+                  <Field
+                    name="amount"
+                    label={modal?.type === 'save' ? 'Alternative Cost (Rp)' : modal?.type === 'refund' ? 'Refunded Amount (Rp)' : 'Actual Amount Settled (Rp)'}
+                    value={modal?.type === 'refund' ? undefined : plan?.amount ?? income?.amount}
+                    min={1}
+                  />
+                  {modal?.type === 'save' && <p className="fine">Enter total cost including delivery/fees. Ensure need is genuinely met.</p>}
+                  {modal?.type === 'pay' && <p className="fine">Marks commitment as fully settled and deducts from spendable balance.</p>}
+                </>
+              )}
+
+              {modal?.type === 'defer' && (
+                <>
+                  <p>{plan?.title} · {rp(plan?.amount ?? 0)}</p>
+                  <Field name="due" label="New Due Date" type="date" min={b?.next} max={date ? plus(date, 180) : undefined} value={b?.next} />
+                  <p className="fine">Commitment remains recorded on the new date. Deferral is not permanent savings.</p>
+                </>
+              )}
+
+              {['daily', 'expense', 'income', 'transfer', 'pending'].includes(modal?.type ?? '') && (
+                <>
+                  <Field name="title" label="Description" type="text" />
+                  <Field name="amount" label="Amount (Rp)" min={1} />
+                  {modal?.type === 'pending' && (
+                    <Field name="due" label="Expected Date" type="date" min={date} max={date ? plus(date, 180) : undefined} value={date} />
+                  )}
+                  <p className="fine">
+                    {modal?.type === 'daily'
+                      ? 'Daily allowance spend. Deducts from spendable cash and reduces today&apos;s safe allowance.'
+                      : modal?.type === 'expense'
+                      ? 'Unplanned cost outside daily average and commitments.'
+                      : modal?.type === 'transfer'
+                      ? 'Internal transfer between own accounts. Net balance remains unchanged.'
+                      : modal?.type === 'pending'
+                      ? 'Verified work or scholarship due. Stays pending until confirmed.'
+                      : 'Record only money actually received.'}
+                  </p>
+                </>
+              )}
+
+              {modal?.type === 'check' && (
+                <>
+                  <Choice name="met" checked={s?.checks.find((c) => c.date === date)?.met ?? true}>
+                    All essential needs were successfully met today.
+                  </Choice>
+                  <Choice name="emergency" checked={s?.checks.find((c) => c.date === date)?.emergency}>
+                    Involved emergency relief, borrowing, or informal credit today.
+                  </Choice>
+                </>
+              )}
+
+              {error && <div className="notice error" role="alert">{error}</div>}
+              <div className="form-footer">
+                <Button type="button" variant="outline" disabled={busy} onClick={() => { setModal(null); setError(''); }}>
+                  Cancel
+                </Button>
+                <Button type="submit" className="primary" disabled={busy}>
+                  {busy ? 'Saving…' : 'Save Record'} <Check size={18} />
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleting} onOpenChange={(v) => { if (!busy) setDeleting(v); }}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Delete All Student Records?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Budgets, commitments, activity logs, and check-ins will be permanently cleared from this session. Export a copy first if you wish to retain your data.
+          </AlertDialogDescription>
+          {error && <p role="alert" className="negative">{error}</p>}
+          <div className="button-row">
+            <Button variant="outline" disabled={busy} onClick={() => setDeleting(false)}>Cancel</Button>
+            <Button className="danger" disabled={busy} onClick={() => void mutate({ type: 'delete' })}>
+              {busy ? 'Deleting…' : 'Confirm Delete All'}
+            </Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+    </main>
+  );
+}
