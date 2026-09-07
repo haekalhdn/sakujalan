@@ -1,11 +1,13 @@
-import { env } from 'cloudflare:workers';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 type Row = { owner: string; version: number; state: string; updated_at: string };
 
+// ponytail: JSON file in tmpdir — ephemeral on Vercel (per-lambda, resets on cold
+// start). Swap for Vercel KV/Postgres if persistence across sessions matters.
 class LocalD1Database {
-  private file = path.resolve(process.cwd(), '.local-db.json');
+  private file = path.join(os.tmpdir(), 'sakujalan-db.json');
   private store = new Map<string, Row>();
 
   constructor() {
@@ -81,10 +83,6 @@ class LocalD1Database {
 
 const localFallback = new LocalD1Database();
 
-export function database(): D1Database {
-  try {
-    const db = (env as unknown as { DB?: D1Database })?.DB;
-    if (db) return db;
-  } catch {}
-  return localFallback as unknown as D1Database;
+export function database() {
+  return localFallback;
 }

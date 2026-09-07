@@ -964,8 +964,11 @@ export default function RunwayApp({ onBackToLanding }: RunwayAppProps = {}) {
                       {!p.paid && (
                         <div className="plan-actions">
                           <Button size="sm" className="primary" onClick={() => show('pay', p.id)}>Mark Paid</Button>
-                          {!p.essential && <Button size="sm" variant="outline" onClick={() => show('defer', p.id)}>Postpone</Button>}
-                          <Button size="sm" variant="ghost" onClick={() => show('save', p.id)}>Cheaper Alt</Button>
+                          {!p.essential && !p.deferredFrom && <Button size="sm" variant="outline" onClick={() => show('defer', p.id)}>Postpone</Button>}
+                          {p.deferredFrom && <Button size="sm" variant="outline" onClick={() => void mutate({ type: 'undoDefer', id: p.id })}>Undo Postpone</Button>}
+                          {p.amount < p.original
+                            ? <Button size="sm" variant="ghost" onClick={() => void mutate({ type: 'undoSave', id: p.id })}>Undo Cheaper Alt</Button>
+                            : <Button size="sm" variant="ghost" onClick={() => show('save', p.id)}>Cheaper Alt</Button>}
                         </div>
                       )}
                     </div>
@@ -1025,6 +1028,34 @@ export default function RunwayApp({ onBackToLanding }: RunwayAppProps = {}) {
                           </strong>
                         </div>
                       ))}
+                    </div>
+                  </div>
+
+                  <div className="ecosystem-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="profile-tag">FULL DATA OWNERSHIP</span>
+                      <ShieldCheck size={16} style={{ color: '#00AA13' }} />
+                    </div>
+                    <h3 style={{ marginTop: '12px' }}>Your Data, Your Rules</h3>
+                    <p style={{ fontSize: '13px', color: '#54665C' }}>
+                      Export your entire financial ledger to JSON, or permanently purge everything and start fresh.
+                    </p>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      <a href="/api/export" download="campus-runway-data.json" style={{ textDecoration: 'none' }}>
+                        <Button variant="outline"><BookOpen size={14} /> Export JSON</Button>
+                      </a>
+                      <Button
+                        variant="outline"
+                        style={{ color: '#B42318', borderColor: '#B42318' }}
+                        disabled={busy}
+                        onClick={() => {
+                          if (window.confirm('Permanently delete ALL your financial records? This cannot be undone.')) {
+                            void mutate({ type: 'delete' });
+                          }
+                        }}
+                      >
+                        Purge All Data
+                      </Button>
                     </div>
                   </div>
                 </div>
